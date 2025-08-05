@@ -1,6 +1,7 @@
 import argparse
 import os
 import json
+import re
 from rag.retriever import find_relevant_rules
 from rag.generator import generate_review
 from utils.line_mapper import map_sql_statements_to_lines
@@ -33,22 +34,26 @@ def analyze_code(file_path):
     print(f"Analyzing {file_path} (Language: {language}), found {len(chunks)} chunks...")
 
     for code_chunk, start_line in chunks:
-        # 2. Find the subset of relevant rules for the current chunk using vector search.
-        relevant_rules = find_relevant_rules(code_chunk, language=language)
-        
-        # 3. Generate the review for the chunk with only the relevant rules.
-        review_result = generate_review(code_chunk, relevant_rules)
+        # Strip the chunk of any leading/trailing whitespace that might confuse the LLM
+        code_chunk = code_chunk.strip()
+        if not code_chunk:
+            continue
 
-        if review_result and review_result.get('issues'):
-            for issue in review_result['issues']:
-                # Adjust line number to be absolute within the file
-                original_line = issue.get('line_number')
-                if isinstance(original_line, int):
-                    issue['line_number'] = original_line + start_line - 1
-                else:
-                    # If the model didn't provide a valid line number, default to the start of the chunk.
-                    issue['line_number'] = start_line
-                all_issues.append(issue)
+        # Find relevant rules for the current chunk using the hybrid retriever
+        relevant_rules, log_method = find_relevant_rules(code_chunk, language=language)
+
+        print(f"\nProcessing chunk (lines {start_line}-{start_line + code_chunk.count('\n')}) with: {log_method}")
+
+        # Generate a review for the chunk
+        review = generate_review(code_chunk, relevant_rules, log_method)
+        if review and review.get('issues_found', 0) > 0:
+            # Adjust line numbers to be relative to the entire file
+            for issue in review['issues']:
+                # The 'start_line' from the chunk is the correct, absolute line number.
+                # The LLM might return a relative line number, but for single-line chunks, it's always 1.
+                # So, we can just use the start_line.
+                issue['line_number'] = start_line
+            all_issues.extend(review['issues'])
 
     # 3. Assemble the final JSON report
     final_report = {

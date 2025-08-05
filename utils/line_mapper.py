@@ -1,51 +1,47 @@
 import sqlparse
 
-def map_sql_statements_to_lines(file_content):
+def map_sql_statements_to_lines(sql_content):
     """
-    Parses a SQL file to map each statement to its starting line number, as per the user's suggestion.
-
-    Args:
-        file_content (str): The content of the SQL file.
-
-    Returns:
-        list: A list of tuples, where each tuple contains the statement text (str) and its starting line number (int).
+    Parses SQL content, strips comments, and maps statements to their original starting line numbers.
+    This version is designed to be more robust against blank lines and formatting differences.
     """
-    statements_with_lines = []
-    parsed_statements = sqlparse.parse(file_content)
-    current_pos = 0
+    statements = []
+    try:
+        # Use sqlparse.format and then split. This is more reliable for isolating statements.
+        stripped_sql = sqlparse.format(sql_content, strip_comments=True)
+        statements = sqlparse.split(stripped_sql)
+    except Exception as e:
+        print(f"Could not parse SQL with sqlparse, falling back to simple split: {e}")
+        statements = [s for s in sql_content.split(';') if s.strip()]
 
-    for stmt in parsed_statements:
-        # Reconstruct the statement without comments
-        clean_tokens = []
-        for token in stmt.flatten():
-            if not isinstance(token.parent, sqlparse.sql.Comment) and not token.is_whitespace:
-                clean_tokens.append(str(token))
+    original_lines = sql_content.splitlines()
+    clean_original_lines = [line.strip() for line in original_lines]
+
+    chunks = []
+    current_line_index = 0
+
+    for stmt in statements:
+        stmt_clean = stmt.strip()
+        if not stmt_clean:
+            continue
+
+        # Get the first non-empty line of the statement to use as a search key.
+        stmt_first_line = ""
+        for line in stmt_clean.splitlines():
+            if line.strip():
+                stmt_first_line = line.strip()
+                break
         
-        clean_stmt_text = " ".join(clean_tokens).strip()
-
-        if not clean_stmt_text:
+        if not stmt_first_line:
             continue
 
-        # Find the start of the original, un-commented statement text
-        original_stmt_text = str(stmt).strip()
-        try:
-            original_stmt_start_pos = file_content.find(original_stmt_text, current_pos)
-            if original_stmt_start_pos == -1:
-                continue
+        # Search for the first line of the statement in the original file content.
+        for i in range(current_line_index, len(clean_original_lines)):
+            if stmt_first_line in clean_original_lines[i]:
+                # We found the starting line.
+                chunks.append((stmt_clean, i + 1))  # i + 1 for 1-based line number
+                current_line_index = i + 1  # Start next search from the next line
+                break
 
-            # Now, find the start of the *clean* statement within the original block
-            clean_stmt_start_pos = original_stmt_text.find(clean_tokens[0])
-            
-            # The absolute position of the clean statement
-            absolute_pos = original_stmt_start_pos + clean_stmt_start_pos
-            
-            # Calculate the line number
-            line_number = file_content[:absolute_pos].count('\n') + 1
-            statements_with_lines.append((clean_stmt_text, line_number))
-            
-            # Update current_pos to the end of the original statement block
-            current_pos = original_stmt_start_pos + len(original_stmt_text)
-        except (ValueError, IndexError):
-            continue
-            
-    return statements_with_lines
+
+    return chunks

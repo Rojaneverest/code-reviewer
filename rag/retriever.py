@@ -16,7 +16,7 @@ print("Model loaded.")
 
 import re
 
-def find_relevant_rules(code_chunk, language='SQL', top_k=5, similarity_threshold=0.5):
+def find_relevant_rules(code_chunk, language='SQL', top_k=5, similarity_threshold=0.35):
     """Finds the most relevant rules for a code chunk using vector similarity search."""
     conn = None
     relevant_rules = {'good_practices': [], 'bad_practices': []}
@@ -41,11 +41,11 @@ def find_relevant_rules(code_chunk, language='SQL', top_k=5, similarity_threshol
                     'severity': severity, 'practice_type': 'bad', 'category': category
                 })
 
+        # If any regex matches were found, we can return them without falling back to vector search.
         if matched_bad_rules:
             print(f"Found {len(matched_bad_rules)} direct violation(s) via regex.")
             relevant_rules['bad_practices'] = matched_bad_rules
-            # If we find a direct violation, we can stop here and return it
-            return relevant_rules
+            return relevant_rules, "Regex Match"
 
         # 2. If no regex match, fall back to vector search for semantic relevance
         print("No direct violations found. Falling back to vector similarity search...")
@@ -58,7 +58,7 @@ def find_relevant_rules(code_chunk, language='SQL', top_k=5, similarity_threshol
         
         if not rules_data:
             print("No vectorized rules found.")
-            return relevant_rules
+            return relevant_rules, "Vector Search"
 
         rule_similarities = []
         for rule in rules_data:
@@ -82,14 +82,14 @@ def find_relevant_rules(code_chunk, language='SQL', top_k=5, similarity_threshol
             else:
                 relevant_rules['good_practices'].append(rule)
 
-        return relevant_rules
+        return relevant_rules, "Vector Search"
 
     except psycopg2.Error as e:
         print(f"Database error: {e}")
-        return relevant_rules
+        return relevant_rules, "Error"
     except Exception as e:
         print(f"An unexpected error occurred: {e}")
-        return relevant_rules
+        return relevant_rules, "Error"
     finally:
         if conn is not None:
             conn.close()

@@ -12,7 +12,7 @@ from config import LM_STUDIO_CONFIG
 # Initialize the OpenAI client to connect to LM Studio
 client = OpenAI(base_url=LM_STUDIO_CONFIG['api_base'], api_key=LM_STUDIO_CONFIG['api_key'])
 
-def generate_review(code_chunk, rules):
+def generate_review(code_chunk, rules, retrieval_method="Vector Search"):
     """Generates a code review in a structured JSON format by calling the LM Studio model."""
     
     # Prepare the bad practices section of the prompt
@@ -27,10 +27,33 @@ def generate_review(code_chunk, rules):
         for rule in rules.get('good_practices', [])
     ]) if rules.get('good_practices') else "None"
 
-    # Construct the final prompt using the specified template
-    prompt = f"""You are a precise code review assistant. Your task is to find violations of bad practices in a code snippet, while being aware of good practices.
+    # Dynamically construct the prompt based on the retrieval method
+    if retrieval_method == "Regex Match":
+        # This prompt is direct and handles multiple potential violations found by regex.
+        prompt = f"""You are a precise code review assistant. A code snippet has been identified as potentially violating one or more bad practices via direct Regex Matches.
 
-**Bad Practices to Avoid:**
+**Bad Practices Found by Regex:**
+{bad_practices_text}
+
+**Code to Review:**
+```
+{code_chunk}
+```
+
+**Task:**
+Your task is to review the code and confirm each violation from the list of 'Bad Practices Found by Regex'.
+
+Your response MUST be a single, valid JSON object. The JSON should contain a list of all confirmed issues. For each issue, provide **only** these four keys: `line_number` (relative to the chunk), `severity`, `rule_id`, and `suggestion`.
+
+If you cannot confirm any of the violations, you MUST return this exact JSON object:
+{{"issues_found": 0, "issues": []}}
+
+JSON Response:"""
+    else:
+        # This prompt is more cautious, asking the LLM to verify the violation first.
+        prompt = f"""You are a precise and discerning code review assistant. Your task is to carefully analyze a code snippet and determine if it violates any of the *potential* bad practices listed below. These rules were identified as potentially relevant through a semantic search, but they may not all be applicable.
+
+**Potential Bad Practices to Evaluate:**
 {bad_practices_text}
 
 **Good Practices to Follow (for context, not for flagging issues):**
@@ -42,9 +65,11 @@ def generate_review(code_chunk, rules):
 ```
 
 **Task:**
-Compare the code ONLY against the 'Bad Practices to Avoid'. Do NOT flag 'Good Practices'. Identify all violations of the bad practices. Your response MUST be a single, valid JSON object. The JSON should contain a list of issues found. For each issue, provide the line number, severity, the ID of the rule that was violated, and a suggestion for fixing it.
+1.  **Critically evaluate** the 'Code to Review' against each of the 'Potential Bad Practices'.
+2.  If you find a genuine violation, create a JSON object with the issue details (line number, severity, rule ID, suggestion).
+3.  **Crucially, if the code does NOT violate any of the listed bad practices, you MUST return an empty list of issues.**
 
-If no violations are found, return this exact JSON object:
+Your response MUST be a single, valid JSON object. If no violations are found, return this exact JSON object:
 {{"issues_found": 0, "issues": []}}
 
 JSON Response:"""
