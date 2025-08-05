@@ -1,76 +1,95 @@
 import psycopg2
-import re
+import numpy as np
+from sentence_transformers import SentenceTransformer
 import sys
 import os
 
-# Add the project root to the Python path
-project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-sys.path.insert(0, project_root)
+# Add project root to the Python path
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from config import DB_CONFIG
 
-def get_all_rules_for_language(language):
-    """Retrieves all rules for a given language from the database."""
-    conn = connect_db()
-    if not conn:
-        return []
-    
+# Initialize the sentence transformer model globally to avoid reloading it on every call
+print("Loading sentence transformer model...")
+model = SentenceTransformer('all-MiniLM-L6-v2')
+print("Model loaded.")
+
+import re
+
+def find_relevant_rules(code_chunk, language='SQL', top_k=5, similarity_threshold=0.35):
+    """Finds the most relevant rules for a code chunk using vector similarity search."""
+    conn = None
+    relevant_rules = {'good_practices': [], 'bad_practices': []}
+
     try:
-        with conn.cursor() as cur:
-            # Corrected the query to use the correct column names: 'title' and 'category'
-            cur.execute("SELECT id, title, description, code_pattern, severity, practice_type, category FROM rules WHERE language = %s", (language,))
-            rules_data = cur.fetchall()
-            rules = [
-                {
-                    'id': row[0],
-                    'title': row[1],
-                    'description': row[2],
-                    'code_pattern': row[3],
-                    'severity': row[4],
-                    'practice_type': row[5],
-                    'category': row[6]
-                }
-                for row in rules_data
-            ]
-            return rules
-    except Exception as e:
-        print(f"Database error: {e}")
-        return []
-    finally:
-        conn.close()
+        conn = psycopg2.connect(**DB_CONFIG)
+        cur = conn.cursor()
 
-def find_relevant_rules(code_chunk, all_rules):
-    """Finds relevant rules, with strict prioritization for critical issues."""
-    matched_rules = []
+        # 1. Hybrid Approach: First, try to find direct violations with regex
+        print(f"\nRunning regex search for bad practices...\n---\n{code_chunk[:200]}...\n---")
+        cur.execute(
+            "SELECT id, title, description, code_pattern, severity, practice_type, category FROM rules WHERE language = %s AND practice_type = 'bad' AND code_pattern IS NOT NULL;",
+            (language,)
+        )
+        bad_practice_rules = cur.fetchall()
 
-    # 1. Find all matching bad practice rules
-    for rule in all_rules:
-        if rule['practice_type'] == 'bad':
-            if re.search(rule['code_pattern'], code_chunk, re.IGNORECASE):
-                matched_rules.append(rule)
+        matched_bad_rules = []
+        for rule_id, title, description, code_pattern, severity, _, category in bad_practice_rules:
+            if re.search(code_pattern, code_chunk, re.IGNORECASE):
+                matched_bad_rules.append({
+                    'id': rule_id, 'title': title, 'description': description, 
+                    'severity': severity, 'practice_type': 'bad', 'category': category
+                })
 
-    # 2. Prioritize critical rules. If any are found, discard all others.
-    critical_rules = [rule for rule in matched_rules if rule.get('severity') == 'Critical']
-    if critical_rules:
-        return {'good_practices': [], 'bad_practices': critical_rules}
+        if matched_bad_rules:
+            print(f"Found {len(matched_bad_rules)} direct violation(s) via regex.")
+            relevant_rules['bad_practices'] = matched_bad_rules
+            # If we find a direct violation, we can stop here and return it
+            return relevant_rules
 
-    # 3. If no critical rules, but other bad practices exist, return them.
-    if matched_rules:
-        return {'good_practices': [], 'bad_practices': matched_rules}
+        # 2. If no regex match, fall back to vector search for semantic relevance
+        print("No direct violations found. Falling back to vector similarity search...")
+        code_embedding = model.encode(code_chunk, convert_to_tensor=False)
+        cur.execute(
+            "SELECT id, title, description, severity, practice_type, category, vector FROM rules WHERE language = %s AND vector IS NOT NULL;",
+            (language,)
+        )
+        rules_data = cur.fetchall()
+        
+        if not rules_data:
+            print("No vectorized rules found.")
+            return relevant_rules
 
-    # 4. If no bad practices are found, find relevant good practices for context.
-    good_practices = []
-    for rule in all_rules:
-        if rule['practice_type'] == 'good':
-            command = rule['code_pattern'].lower()
-            if command in code_chunk.lower():
-                good_practices.append(rule)
+        rule_similarities = []
+        for rule in rules_data:
+            rule_id, title, description, severity, practice_type, category, vector = rule
+            if vector:
+                similarity = np.dot(code_embedding, np.array(vector)) / (np.linalg.norm(code_embedding) * np.linalg.norm(np.array(vector)))
+                if similarity > similarity_threshold:
+                    rule_similarities.append((similarity, {
+                        'id': rule_id, 'title': title, 'description': description,
+                        'severity': severity, 'practice_type': practice_type, 'category': category
+                    }))
 
-    return {'good_practices': good_practices, 'bad_practices': []}
+        rule_similarities.sort(key=lambda x: x[0], reverse=True)
+        top_rules = [rule for _, rule in rule_similarities[:top_k]]
 
-def connect_db():
-    try:
-        return psycopg2.connect(**DB_CONFIG)
+        print(f"Found {len(top_rules)} semantically relevant rules with similarity > {similarity_threshold}.")
+
+        for rule in top_rules:
+            if rule['practice_type'] == 'bad':
+                relevant_rules['bad_practices'].append(rule)
+            else:
+                relevant_rules['good_practices'].append(rule)
+
+        return relevant_rules
+
     except psycopg2.Error as e:
-        print(f"Database connection error: {e}")
-        return None
+        print(f"Database error: {e}")
+        return relevant_rules
+    except Exception as e:
+        print(f"An unexpected error occurred: {e}")
+        return relevant_rules
+    finally:
+        if conn is not None:
+            conn.close()

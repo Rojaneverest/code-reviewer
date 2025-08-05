@@ -4,3 +4,4 @@ datasets
 psycopg2-binary
 sqlparse
 openai
+sentence-transformers

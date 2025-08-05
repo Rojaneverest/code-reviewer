@@ -1,7 +1,7 @@
 import argparse
 import os
 import json
-from rag.retriever import get_all_rules_for_language, find_relevant_rules
+from rag.retriever import find_relevant_rules
 from rag.generator import generate_review
 from utils.line_mapper import map_sql_statements_to_lines
 from utils.chunker import chunk_pyspark_file
@@ -32,15 +32,9 @@ def analyze_code(file_path):
 
     print(f"Analyzing {file_path} (Language: {language}), found {len(chunks)} chunks...")
 
-    # 1. Retrieve all rules for the language once.
-    all_rules = get_all_rules_for_language(language)
-    if not all_rules:
-        print("Could not retrieve any rules for this language.")
-        return
-
     for code_chunk, start_line in chunks:
-        # 2. Find the subset of relevant rules for the current chunk.
-        relevant_rules = find_relevant_rules(code_chunk, all_rules)
+        # 2. Find the subset of relevant rules for the current chunk using vector search.
+        relevant_rules = find_relevant_rules(code_chunk, language=language)
         
         # 3. Generate the review for the chunk with only the relevant rules.
         review_result = generate_review(code_chunk, relevant_rules)

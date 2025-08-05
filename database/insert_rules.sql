@@ -6,7 +6,7 @@ VALUES
     (1, 'Avoid SELECT *', 'Using SELECT * can cause performance issues and break views or code if the schema changes.', 'select\s+\*\s+from', 'Major', 'SQL', 'Performance', 'bad'),
     (2, 'Avoid Leading Wildcards in LIKE', 'Leading wildcards in LIKE clauses prevent the database from using an index, leading to slow queries.', 'like\s+''%[^'']*%''', 'Major', 'SQL', 'Performance', 'bad'),
     (3, 'Avoid DELETE without WHERE', 'DELETE statements without a WHERE clause will delete all rows in a table. Use TRUNCATE for clarity if this is intended.', 'delete\s+from\s+[a-zA-Z0-9_]+\s*;', 'Major', 'SQL', 'Data Integrity', 'bad'),
-    (4, 'Avoid Implicit Joins', 'Use explicit JOIN syntax instead of comma-separated tables in the FROM clause for better readability and to avoid accidental cross joins.', 'from\s+[a-zA-Z0-9_]+\s*,\s*[a-zA-Z0-9_]+', 'Minor', 'SQL', 'Clarity', 'bad'),
+    (4, 'Avoid Implicit Joins', 'Use explicit JOIN syntax instead of comma-separated tables in the FROM clause for better readability and to avoid accidental cross joins.', '(?i)\\bfrom\\b(?:(?!\\bwhere\\b|\\bgroup by\\b|\\border by\\b|\\bjoin\\b).)*,', 'Minor', 'SQL', 'Clarity', 'bad'),
 
     -- Good Practices (with Simple Keywords)
     (5, 'Use Explicit Column Names', 'Always specify the columns you need in a SELECT statement.', 'select', 'Minor', 'SQL', 'Clarity', 'good'),
@@ -17,7 +17,7 @@ VALUES
     (8, 'Avoid functions on indexed columns', 'Applying functions to indexed columns in a WHERE clause can prevent the optimizer from using the index.', 'WHERE\s+\w+\([^)]+\)\s*=', 'Major', 'SQL', 'Performance', 'bad'),
     (9, 'Use COUNT(1) or COUNT(column) instead of COUNT(*)', 'COUNT(*) can be slower as it may check all columns. Use COUNT(1) for existence checks or COUNT(column) for non-null counts.', 'COUNT\s*\(\s*\*\s*\)', 'Minor', 'SQL', 'Performance', 'bad'),
     (10, 'Avoid HAVING for WHERE conditions', 'HAVING should only be used to filter aggregated results. Use WHERE for row-level filtering before aggregation.', 'having\s+[^=]*$', 'Minor', 'SQL', 'Performance', 'bad'),
-    (11, 'Use table aliases in JOINs', 'Using table aliases (e.g., `FROM products p JOIN categories c`) improves readability, especially in complex queries.', 'join\s+[a-zA-Z0-9_]+\s+on', 'Minor', 'SQL', 'Clarity', 'bad'),
+    (11, 'Use table aliases in JOINs', 'Using table aliases (e.g., `FROM products p JOIN categories c`) improves readability, especially in complex queries.', '(?i)\\bjoin\\b\\s+\\w+\\s+(?!as\\b)\\w+\\s+\\bon\\b', 'Minor', 'SQL', 'Clarity', 'bad'),
 
     -- More Good Practices
     (12, 'Use TRUNCATE to clear tables', 'TRUNCATE is faster than DELETE for clearing all rows from a table.', 'truncate\s+table', 'Minor', 'SQL', 'Performance', 'good'),
