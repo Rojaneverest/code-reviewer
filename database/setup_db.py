@@ -9,7 +9,7 @@ sys.path.insert(0, project_root)
 from config import DB_CONFIG
 
 def setup_database():
-    """Sets up the PostgreSQL database, creating the rules table and inserting initial data."""
+    """Sets up the PostgreSQL database, creating the vector_rules table and inserting initial data."""
     conn = None
     try:
         # Connect to the PostgreSQL server
@@ -17,34 +17,32 @@ def setup_database():
         conn = psycopg2.connect(**DB_CONFIG)
         cursor = conn.cursor()
 
-        # Create the rules table
-        print('Dropping table "rules" if it exists...')
-        cursor.execute("DROP TABLE IF EXISTS rules;")
+        # Create the vector_rules table
+        print('Dropping table "vector_rules" if it exists...')
+        cursor.execute("DROP TABLE IF EXISTS vector_rules;")
 
-        print('Creating table "rules"...')
+        print('Creating table "vector_rules"...')
         cursor.execute("""
-        CREATE TABLE IF NOT EXISTS rules (
+        CREATE TABLE vector_rules (
             id SERIAL PRIMARY KEY,
-            code_pattern TEXT NOT NULL,
-            language TEXT NOT NULL,
-            category TEXT NOT NULL,
-            severity TEXT NOT NULL,
-            title TEXT NOT NULL,
+            title VARCHAR(255) NOT NULL,
             description TEXT NOT NULL,
-            practice_type TEXT NOT NULL DEFAULT 'bad',
-            last_updated_utc TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            UNIQUE (language, title)
+            category VARCHAR(50) NOT NULL,
+            severity VARCHAR(50),
+            language VARCHAR(50) NOT NULL,
+            suggestion TEXT,
+            vector FLOAT[]
         );
         """)
 
         # Insert initial data from SQL file
-        print('Inserting initial data from "database/insert_rules.sql"...')
-        sql_file_path = os.path.join(os.path.dirname(__file__), 'insert_rules.sql')
+        print('Inserting initial data from "database/insert_vector_rules.sql"...')
+        sql_file_path = os.path.join(os.path.dirname(__file__), 'insert_vector_rules.sql')
         with open(sql_file_path, 'r') as f:
             cursor.execute(f.read())
 
         conn.commit()
-        print('Database setup completed successfully.')
+        print('Database setup for vector_rules completed successfully.')
 
     except psycopg2.Error as e:
         print(f"Database error: {e}")

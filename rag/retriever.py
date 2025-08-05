@@ -14,73 +14,53 @@ print("Loading sentence transformer model...")
 model = SentenceTransformer('all-MiniLM-L6-v2')
 print("Model loaded.")
 
-import re
-
 def find_relevant_rules(code_chunk, language='SQL', top_k=5, similarity_threshold=0.35):
     """Finds the most relevant rules for a code chunk using vector similarity search."""
     conn = None
-    relevant_rules = {'good_practices': [], 'bad_practices': []}
+    relevant_rules = [] # Simplified to a single list
 
     try:
         conn = psycopg2.connect(**DB_CONFIG)
         cur = conn.cursor()
 
-        # 1. Hybrid Approach: First, try to find direct violations with regex
-        print(f"\nRunning regex search for bad practices...\n---\n{code_chunk[:200]}...\n---")
-        cur.execute(
-            "SELECT id, title, description, code_pattern, severity, practice_type, category FROM rules WHERE language = %s AND practice_type = 'bad' AND code_pattern IS NOT NULL;",
-            (language,)
-        )
-        bad_practice_rules = cur.fetchall()
-
-        matched_bad_rules = []
-        for rule_id, title, description, code_pattern, severity, _, category in bad_practice_rules:
-            if re.search(code_pattern, code_chunk, re.IGNORECASE):
-                matched_bad_rules.append({
-                    'id': rule_id, 'title': title, 'description': description, 
-                    'severity': severity, 'practice_type': 'bad', 'category': category
-                })
-
-        if matched_bad_rules:
-            print(f"Found {len(matched_bad_rules)} direct violation(s) via regex.")
-            relevant_rules['bad_practices'] = matched_bad_rules
-            # If we find a direct violation, we can stop here and return it
-            return relevant_rules
-
-        # 2. If no regex match, fall back to vector search for semantic relevance
-        print("No direct violations found. Falling back to vector similarity search...")
+        # Perform vector search for semantic relevance against the new table
+        print(f"\nRunning vector similarity search...\n---\n{code_chunk[:200]}...\n---")
         code_embedding = model.encode(code_chunk, convert_to_tensor=False)
+        
+        # Query the new vector_rules table
         cur.execute(
-            "SELECT id, title, description, severity, practice_type, category, vector FROM rules WHERE language = %s AND vector IS NOT NULL;",
+            "SELECT id, title, description, severity, category, suggestion, vector FROM vector_rules WHERE language = %s AND vector IS NOT NULL;",
             (language,)
         )
         rules_data = cur.fetchall()
         
         if not rules_data:
-            print("No vectorized rules found.")
+            print("No vectorized rules found in 'vector_rules' table.")
             return relevant_rules
 
         rule_similarities = []
         for rule in rules_data:
-            rule_id, title, description, severity, practice_type, category, vector = rule
+            rule_id, title, description, severity, category, suggestion, vector = rule
             if vector:
+                # Calculate cosine similarity
                 similarity = np.dot(code_embedding, np.array(vector)) / (np.linalg.norm(code_embedding) * np.linalg.norm(np.array(vector)))
                 if similarity > similarity_threshold:
                     rule_similarities.append((similarity, {
-                        'id': rule_id, 'title': title, 'description': description,
-                        'severity': severity, 'practice_type': practice_type, 'category': category
+                        'id': rule_id, 
+                        'title': title, 
+                        'description': description,
+                        'severity': severity, 
+                        'category': category,
+                        'suggestion': suggestion
                     }))
 
+        # Sort by similarity and get the top_k results
         rule_similarities.sort(key=lambda x: x[0], reverse=True)
-        top_rules = [rule for _, rule in rule_similarities[:top_k]]
+        relevant_rules = [rule for _, rule in rule_similarities[:top_k]]
 
-        print(f"Found {len(top_rules)} semantically relevant rules with similarity > {similarity_threshold}.")
-
-        for rule in top_rules:
-            if rule['practice_type'] == 'bad':
-                relevant_rules['bad_practices'].append(rule)
-            else:
-                relevant_rules['good_practices'].append(rule)
+        print(f"Found {len(relevant_rules)} semantically relevant rules with similarity > {similarity_threshold}.")
+        for rule in relevant_rules:
+            print(f"  -> Found relevant rule: '{rule['title']}'")
 
         return relevant_rules
 

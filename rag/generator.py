@@ -12,68 +12,72 @@ from config import LM_STUDIO_CONFIG
 # Initialize the OpenAI client to connect to LM Studio
 client = OpenAI(base_url=LM_STUDIO_CONFIG['api_base'], api_key=LM_STUDIO_CONFIG['api_key'])
 
-def generate_review(code_chunk, rules):
-    """Generates a code review in a structured JSON format by calling the LM Studio model."""
-    
-    # Prepare the bad practices section of the prompt
-    bad_practices_text = "\n".join([
-        f"- {rule['title']} (Rule ID: {rule['id']}, Severity: {rule['severity']}): {rule['description']}"
-        for rule in rules.get('bad_practices', [])
-    ]) if rules.get('bad_practices') else "None"
-
-    # Prepare the good practices section of the prompt
-    good_practices_text = "\n".join([
-        f"- {rule['title']} (Rule ID: {rule['id']}): {rule['description']}"
-        for rule in rules.get('good_practices', [])
-    ]) if rules.get('good_practices') else "None"
-
-    # Construct the final prompt using the specified template
-    prompt = f"""You are a precise code review assistant. Your task is to find violations of bad practices in a code snippet, while being aware of good practices.
-
-**Bad Practices to Avoid:**
-{bad_practices_text}
-
-**Good Practices to Follow (for context, not for flagging issues):**
-{good_practices_text}
-
-**Code to Review:**
-```
-{code_chunk}
-```
-
-**Task:**
-Compare the code ONLY against the 'Bad Practices to Avoid'. Do NOT flag 'Good Practices'. Identify all violations of the bad practices. Your response MUST be a single, valid JSON object. The JSON should contain a list of issues found. For each issue, provide the line number, severity, the ID of the rule that was violated, and a suggestion for fixing it.
-
-If no violations are found, return this exact JSON object:
-{{"issues_found": 0, "issues": []}}
-
-JSON Response:"""
-
+def call_lm_studio(prompt, temperature):
     try:
         completion = client.chat.completions.create(
             model="local-model", # Use a model name recognized by your LM Studio server
             messages=[
                 {"role": "user", "content": prompt}
             ],
-            temperature=0.0 # Set to 0 for deterministic, structured output
+            temperature=temperature # Set to 0 for deterministic, structured output
         )
-        review_text = completion.choices[0].message.content
-
-        # Find the JSON object within the response text
-        try:
-            # The model might return the JSON wrapped in markdown ```json ... ```
-            json_start = review_text.find('{')
-            json_end = review_text.rfind('}') + 1
-            if json_start != -1 and json_end != -1:
-                json_str = review_text[json_start:json_end]
-                return json.loads(json_str)
-            else:
-                print(f"Error: Could not find a valid JSON object in the response.")
-                return None
-        except json.JSONDecodeError as e:
-            print(f"Error parsing JSON from response: {e}")
-            print(f"Received text: {review_text}")
-            return None
+        return completion.choices[0].message.content
     except Exception as e:
-        print(f"Error connecting to LM Studio or parsing JSON: {e}")
+        print(f"Error connecting to LM Studio: {e}")
         return None
+
+def generate_review(code_chunk, rules, temperature=0.1, max_retries=3):
+    """Generates a code review, retrying on failure to parse LLM output."""
+    # Prepare the rules text for the prompt
+    rules_text = "\n".join([
+        f"- **Rule ID {r['id']} ({r['severity']}):** {r['title']}. {r['description']} Suggestion: {r['suggestion']}"
+        for r in rules
+    ]) if rules else "None"
+
+    # Construct the final prompt
+    prompt = f"""You are a precise and thorough SQL code review assistant. Your task is to find violations of the following SQL best practices in the code snippet provided.
+
+**Rules to Check:**
+{rules_text}
+
+**Code to Review:**
+```
+{code_chunk}
+```
+
+**Instructions:**
+- Analyze the code ONLY against the 'Rules to Check'.
+- If a rule is not relevant to the code, ignore it.
+- Report only confirmed violations.
+- Your response MUST be a single, valid JSON object.
+- For each violation, provide the line number, severity, rule ID, and a concise suggestion.
+
+If no violations are found, return this exact JSON object:
+{{"issues_found": 0, "issues": []}}
+
+JSON Response:"""
+
+    # Retry loop for calling the language model and parsing the response
+    for attempt in range(max_retries):
+        try:
+            # Call the language model
+            response = call_lm_studio(prompt, temperature)
+
+            # Find the start of the JSON object and extract it
+            json_start = response.find('{')
+            if json_start == -1:
+                raise json.JSONDecodeError("No JSON object found in response", response, 0)
+            
+            json_response = response[json_start:]
+            
+            # Parse the JSON and return successfully
+            review_data = json.loads(json_response)
+            return review_data
+        
+        except json.JSONDecodeError as e:
+            print(f"Attempt {attempt + 1}/{max_retries} failed: Error parsing JSON. {e}")
+            if attempt + 1 == max_retries:
+                print(f"Final attempt failed. Raw response: {response}")
+                return None # Return None after the last failed attempt
+
+    return None # Should not be reached, but as a fallback

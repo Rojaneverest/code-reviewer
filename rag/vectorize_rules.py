@@ -9,7 +9,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from config import DB_CONFIG
 
 def vectorize_rules():
-    """Fetches rules, generates embeddings, and stores them in the database."""
+    """Fetches rules from the vector_rules table, generates embeddings, and stores them."""
     # Load a pre-trained sentence transformer model
     model = SentenceTransformer('all-MiniLM-L6-v2')
 
@@ -19,13 +19,13 @@ def vectorize_rules():
         conn = psycopg2.connect(**DB_CONFIG)
         cur = conn.cursor()
 
-        # Fetch all rules that haven't been vectorized yet
-        print("Fetching rules from the database...")
-        cur.execute("SELECT id, title, description, category FROM rules WHERE vector IS NULL;")
+        # Fetch all rules from the new table that haven't been vectorized yet
+        print("Fetching rules from the 'vector_rules' table...")
+        cur.execute("SELECT id, title, description, category FROM vector_rules WHERE vector IS NULL;")
         rules = cur.fetchall()
 
         if not rules:
-            print("All rules are already vectorized.")
+            print("All rules in 'vector_rules' are already vectorized.")
             return
 
         print(f"Found {len(rules)} rules to vectorize...")
@@ -37,12 +37,12 @@ def vectorize_rules():
             # Generate the embedding
             embedding = model.encode(combined_text).tolist()
             
-            # Update the rule in the database with the new vector
-            cur.execute("UPDATE rules SET vector = %s WHERE id = %s;", (embedding, rule_id))
-            print(f"Vectorized and updated rule ID: {rule_id}")
+            # Update the rule in the new table with the generated vector
+            cur.execute("UPDATE vector_rules SET vector = %s WHERE id = %s;", (embedding, rule_id))
+            print(f"Vectorized and updated rule ID: {rule_id} in 'vector_rules'")
 
         conn.commit()
-        print("All rules have been vectorized and stored successfully.")
+        print("All rules in 'vector_rules' have been vectorized and stored successfully.")
 
         cur.close()
 
