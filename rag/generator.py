@@ -15,17 +15,26 @@ client = OpenAI(base_url=LM_STUDIO_CONFIG['api_base'], api_key=LM_STUDIO_CONFIG[
 def generate_review(code_chunk, rules):
     """Generates a code review in a structured JSON format by calling the LM Studio model."""
     
-    # Prepare the rules section of the prompt
-    rules_text = "\n".join([
-        f"- {rule[6]} (Rule ID: {rule[0]}, Severity: {rule[4]})"
-        for rule in rules
-    ])
+    # Prepare the bad practices section of the prompt
+    bad_practices_text = "\n".join([
+        f"- {rule['title']} (Rule ID: {rule['id']}, Severity: {rule['severity']}): {rule['description']}"
+        for rule in rules.get('bad_practices', [])
+    ]) if rules.get('bad_practices') else "None"
+
+    # Prepare the good practices section of the prompt
+    good_practices_text = "\n".join([
+        f"- {rule['title']} (Rule ID: {rule['id']}): {rule['description']}"
+        for rule in rules.get('good_practices', [])
+    ]) if rules.get('good_practices') else "None"
 
     # Construct the final prompt using the specified template
-    prompt = f"""You are a code review assistant. Your task is to find rule violations in a code snippet.
+    prompt = f"""You are a precise code review assistant. Your task is to find violations of bad practices in a code snippet, while being aware of good practices.
 
-**Rules:**
-{rules_text}
+**Bad Practices to Avoid:**
+{bad_practices_text}
+
+**Good Practices to Follow (for context, not for flagging issues):**
+{good_practices_text}
 
 **Code to Review:**
 ```
@@ -33,7 +42,7 @@ def generate_review(code_chunk, rules):
 ```
 
 **Task:**
-Compare the code against the rules. Identify all violations. Your response MUST be a single, valid JSON object. The JSON should contain a list of issues found. For each issue, provide the line number, severity, the ID of the rule that was violated, and a suggestion for fixing it.
+Compare the code ONLY against the 'Bad Practices to Avoid'. Do NOT flag 'Good Practices'. Identify all violations of the bad practices. Your response MUST be a single, valid JSON object. The JSON should contain a list of issues found. For each issue, provide the line number, severity, the ID of the rule that was violated, and a suggestion for fixing it.
 
 If no violations are found, return this exact JSON object:
 {{"issues_found": 0, "issues": []}}

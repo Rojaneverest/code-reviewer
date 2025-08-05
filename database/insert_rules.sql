@@ -1,27 +1,27 @@
--- SQL Rules: Performance
-INSERT INTO rules (code_pattern, language, category, severity, title, description)
-VALUES
-    ('SELECT *', 'SQL', 'Performance', 'Major', 'Avoid SELECT *', 'Explicitly list the columns you need instead of using `SELECT *`. This reduces data transfer and improves query readability.'),
-    ('LIKE ''%...', 'SQL', 'Performance', 'Major', 'Avoid leading wildcards in LIKE', 'Using a wildcard at the beginning of a LIKE pattern (e.g., `%value`) prevents the database from using an index, leading to a full table scan.'),
-    ('IN (SELECT ...)', 'SQL', 'Performance', 'Minor', 'Prefer EXISTS over IN for subqueries', 'For large subqueries, `EXISTS` is often more performant than `IN` because it can stop as soon as it finds a match.'),
-    ('DELETE FROM', 'SQL', 'Performance', 'Major', 'Use TRUNCATE for clearing entire tables', '`TRUNCATE TABLE` is faster than `DELETE FROM table` for deleting all rows, as it deallocates data pages with minimal logging.');
+TRUNCATE TABLE rules RESTART IDENTITY;
 
--- SQL Rules: Readability & Maintainability
-INSERT INTO rules (code_pattern, language, category, severity, title, description)
+INSERT INTO rules (id, title, description, code_pattern, severity, language, category, practice_type)
 VALUES
-    ('JOIN', 'SQL', 'Readability', 'Minor', 'Use explicit JOIN syntax', 'Use `JOIN` syntax instead of comma-separated tables in the `FROM` clause. It makes the relationships between tables clearer and is the ANSI standard.'),
-    ('NOLOCK', 'SQL', 'Best Practice', 'Critical', 'Avoid using NOLOCK hint', 'The `NOLOCK` hint can lead to reading uncommitted data (dirty reads), which can cause data inconsistency and incorrect results.');
+    -- Bad Practices (with Regex Patterns)
+    (1, 'Avoid SELECT *', 'Using SELECT * can cause performance issues and break views or code if the schema changes.', 'select\s+\*\s+from', 'Major', 'SQL', 'Performance', 'bad'),
+    (2, 'Avoid Leading Wildcards in LIKE', 'Leading wildcards in LIKE clauses prevent the database from using an index, leading to slow queries.', 'like\s+''%[^'']*%''', 'Major', 'SQL', 'Performance', 'bad'),
+    (3, 'Avoid DELETE without WHERE', 'DELETE statements without a WHERE clause will delete all rows in a table. Use TRUNCATE for clarity if this is intended.', 'delete\s+from\s+[a-zA-Z0-9_]+\s*;', 'Major', 'SQL', 'Data Integrity', 'bad'),
+    (4, 'Avoid Implicit Joins', 'Use explicit JOIN syntax instead of comma-separated tables in the FROM clause for better readability and to avoid accidental cross joins.', 'from\s+[a-zA-Z0-9_]+\s*,\s*[a-zA-Z0-9_]+', 'Minor', 'SQL', 'Clarity', 'bad'),
 
--- PySpark Rules: Performance
-INSERT INTO rules (code_pattern, language, category, severity, title, description)
-VALUES
-    ('.collect()', 'PySpark', 'Performance', 'Critical', 'Avoid .collect() on large DataFrames', 'Calling `.collect()` on a large DataFrame can cause an OutOfMemoryError on the driver node. Use `.take()`, `.show()`, or write to a file instead.'),
-    ('udf(', 'PySpark', 'Performance', 'Major', 'Prefer built-in functions over UDFs', 'User-Defined Functions (UDFs) in PySpark are a black box to the Catalyst optimizer. Whenever possible, use built-in Spark SQL functions for better performance.'),
-    ('.withColumn(', 'PySpark', 'Performance', 'Minor', 'Avoid using .withColumn in a loop', 'Adding columns one by one in a loop can be inefficient. It is better to use `select()` with all new columns defined at once.'),
-    ('df.write.format("csv")', 'PySpark', 'Performance', 'Major', 'Use Parquet or ORC for storage', 'Parquet and ORC are columnar storage formats that offer better compression and query performance compared to row-based formats like CSV or JSON.');
+    -- Good Practices (with Simple Keywords)
+    (5, 'Use Explicit Column Names', 'Always specify the columns you need in a SELECT statement.', 'select', 'Minor', 'SQL', 'Clarity', 'good'),
+    (6, 'Use Explicit JOINs', 'Use explicit JOIN syntax for clarity and to prevent accidental cross joins.', 'join', 'Minor', 'SQL', 'Clarity', 'good'),
 
--- PySpark Rules: Best Practice
-INSERT INTO rules (code_pattern, language, category, severity, title, description)
-VALUES
-    ('.cache()', 'PySpark', 'Best Practice', 'Major', 'Use .cache() or .persist() wisely', 'Cache DataFrames that are used multiple times in an iterative algorithm. Un-persisting them after use is also important to free up memory.'),
-    ('spark.read.csv', 'PySpark', 'Best Practice', 'Minor', 'Define schema when reading data', 'When reading data from sources like CSV or JSON, explicitly defining a schema avoids an extra pass over the data to infer types and prevents potential type mismatches.');
+    -- More Bad Practices
+    (7, 'Avoid NOLOCK hint', 'The NOLOCK hint can lead to reading uncommitted data (dirty reads), which can cause data inconsistency.', '\(\s*NOLOCK\s*\)', 'Critical', 'SQL', 'Data Integrity', 'bad'),
+    (8, 'Avoid functions on indexed columns', 'Applying functions to indexed columns in a WHERE clause can prevent the optimizer from using the index.', 'WHERE\s+\w+\([^)]+\)\s*=', 'Major', 'SQL', 'Performance', 'bad'),
+    (9, 'Use COUNT(1) or COUNT(column) instead of COUNT(*)', 'COUNT(*) can be slower as it may check all columns. Use COUNT(1) for existence checks or COUNT(column) for non-null counts.', 'COUNT\s*\(\s*\*\s*\)', 'Minor', 'SQL', 'Performance', 'bad'),
+    (10, 'Avoid HAVING for WHERE conditions', 'HAVING should only be used to filter aggregated results. Use WHERE for row-level filtering before aggregation.', 'having\s+[^=]*$', 'Minor', 'SQL', 'Performance', 'bad'),
+    (11, 'Use table aliases in JOINs', 'Using table aliases (e.g., `FROM products p JOIN categories c`) improves readability, especially in complex queries.', 'join\s+[a-zA-Z0-9_]+\s+on', 'Minor', 'SQL', 'Clarity', 'bad'),
+
+    -- More Good Practices
+    (12, 'Use TRUNCATE to clear tables', 'TRUNCATE is faster than DELETE for clearing all rows from a table.', 'truncate\s+table', 'Minor', 'SQL', 'Performance', 'good'),
+    (13, 'Use UNION ALL over UNION', 'Use UNION ALL if you do not need to remove duplicate rows, as it is more performant.', 'union\s+all', 'Minor', 'SQL', 'Performance', 'good'),
+    (14, 'Use table aliases', 'Using table aliases improves readability in queries with multiple tables.', 'as\s+[a-zA-Z_]', 'Minor', 'SQL', 'Clarity', 'good'),
+    (15, 'Use CASE for conditional logic', 'The CASE statement is the standard way to handle conditional logic within SQL queries.', 'case\s+when', 'Minor', 'SQL', 'Clarity', 'good'),
+    (16, 'Comment complex queries', 'Adding comments (--) to explain complex logic improves maintainability.', '--', 'Minor', 'SQL', 'Clarity', 'good');

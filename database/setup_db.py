@@ -18,17 +18,22 @@ def setup_database():
         cursor = conn.cursor()
 
         # Create the rules table
+        print('Dropping table "rules" if it exists...')
+        cursor.execute("DROP TABLE IF EXISTS rules;")
+
         print('Creating table "rules"...')
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS rules (
-            rule_id SERIAL PRIMARY KEY,
+            id SERIAL PRIMARY KEY,
             code_pattern TEXT NOT NULL,
-            language VARCHAR(50) NOT NULL,
-            category VARCHAR(50) NOT NULL,
-            severity VARCHAR(50) NOT NULL,
+            language TEXT NOT NULL,
+            category TEXT NOT NULL,
+            severity TEXT NOT NULL,
             title TEXT NOT NULL,
             description TEXT NOT NULL,
-            last_updated_utc TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            practice_type TEXT NOT NULL DEFAULT 'bad',
+            last_updated_utc TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE (language, title)
         );
         """)
 

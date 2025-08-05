@@ -1,9 +1,10 @@
 import argparse
 import os
 import json
-from rag.retriever import retrieve_relevant_rules
+from rag.retriever import get_all_rules_for_language, find_relevant_rules
 from rag.generator import generate_review
-from utils.chunker import chunk_code
+from utils.line_mapper import map_sql_statements_to_lines
+from utils.chunker import chunk_pyspark_file
 
 def analyze_code(file_path):
     """Analyzes a code file using the RAG model, processing it in chunks."""
@@ -19,27 +20,30 @@ def analyze_code(file_path):
     language = ""
     if file_extension == '.sql':
         language = 'SQL'
+        chunks = map_sql_statements_to_lines(file_content)
     elif file_extension == '.py':
         language = 'PySpark' # Assuming .py is PySpark for this project
+        chunks = chunk_pyspark_file(file_content)
     else:
         print(f"Unsupported file type: {file_extension}")
         return
 
-    # Get code chunks with their starting line numbers
-    chunks = chunk_code(file_path, file_content)
     all_issues = []
 
     print(f"Analyzing {file_path} (Language: {language}), found {len(chunks)} chunks...")
 
-    # 1. Retrieve all relevant rules for the language once
-    rules = retrieve_relevant_rules(None, language) # Pass None for code_chunk as it's not used for rule retrieval anymore
-    if not rules:
-        print("No relevant rules found for this language.")
+    # 1. Retrieve all rules for the language once.
+    all_rules = get_all_rules_for_language(language)
+    if not all_rules:
+        print("Could not retrieve any rules for this language.")
         return
 
     for code_chunk, start_line in chunks:
-        # 2. Generate the review for each chunk
-        review_result = generate_review(code_chunk, rules)
+        # 2. Find the subset of relevant rules for the current chunk.
+        relevant_rules = find_relevant_rules(code_chunk, all_rules)
+        
+        # 3. Generate the review for the chunk with only the relevant rules.
+        review_result = generate_review(code_chunk, relevant_rules)
 
         if review_result and review_result.get('issues'):
             for issue in review_result['issues']:
