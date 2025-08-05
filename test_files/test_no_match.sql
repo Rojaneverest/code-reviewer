@@ -22,7 +22,7 @@ SET
     status = 'shipped'
 WHERE
     order_id = 1024;
-
+    
 -- A more complex query with a JOIN and aliases (good practice)
 SELECT
     o.order_id,

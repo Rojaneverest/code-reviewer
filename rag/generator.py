@@ -27,6 +27,9 @@ def generate_review(code_chunk, rules, retrieval_method="Vector Search"):
         for rule in rules.get('good_practices', [])
     ]) if rules.get('good_practices') else "None"
 
+    # Default temperature for deterministic output
+    temperature = 0.0
+
     # Dynamically construct the prompt based on the retrieval method
     if retrieval_method == "Regex Match":
         # This prompt is direct and handles multiple potential violations found by regex.
@@ -49,9 +52,10 @@ If you cannot confirm any of the violations, you MUST return this exact JSON obj
 {{"issues_found": 0, "issues": []}}
 
 JSON Response:"""
-    else:
-        # This prompt is more cautious, asking the LLM to verify the violation first.
-        prompt = f"""You are a precise and discerning code review assistant. Your task is to carefully analyze a code snippet and determine if it violates any of the *potential* bad practices listed below. These rules were identified as potentially relevant through a semantic search, but they may not all be applicable.
+    else:  # Vector Search
+        if rules.get('bad_practices'):
+            # This prompt is cautious, asking the LLM to verify the violation first based on retrieved rules.
+            prompt = f"""You are a precise and discerning code review assistant. Your task is to carefully analyze a code snippet and determine if it violates any of the *potential* bad practices listed below. These rules were identified as potentially relevant through a semantic search, but they may not all be applicable.
 
 **Potential Bad Practices to Evaluate:**
 {bad_practices_text}
@@ -73,6 +77,29 @@ Your response MUST be a single, valid JSON object. If no violations are found, r
 {{"issues_found": 0, "issues": []}}
 
 JSON Response:"""
+        else:
+            # This prompt is open-ended, asking the LLM to use its own knowledge when no rules are found.
+            # We also increase the temperature to allow for more creative, non-deterministic responses.
+            temperature = 0.5
+            prompt = f"""You are a highly intelligent SQL code review assistant, now running on a powerful 8B parameter model. Your primary method of finding issues (rule-based retrieval) found no relevant rules for the following code.
+
+Therefore, you must now rely entirely on your own extensive knowledge of SQL best practices, performance tuning, and security to conduct a thorough review.
+
+**Code to Review:**
+```
+{code_chunk}
+```
+
+**Task:**
+1.  **Analyze the code creatively and critically.** Look for anti-patterns, performance bottlenecks (like correlated subqueries), or security risks that may not be in a standard rulebook.
+2.  If you identify any issues, create a JSON object describing them.
+3.  For each issue, provide **only** these three keys: `line_number` (relative to the chunk), `severity` (use the special value "AI Generated Suggestion"), and `suggestion`.
+4.  **Do not include a `rule_id`.**
+
+Your response MUST be a single, valid JSON object. If you find no issues, you MUST return this exact JSON object:
+{{"issues_found": 0, "issues": []}}
+
+JSON Response:"""
 
     try:
         completion = client.chat.completions.create(
@@ -80,7 +107,7 @@ JSON Response:"""
             messages=[
                 {"role": "user", "content": prompt}
             ],
-            temperature=0.0 # Set to 0 for deterministic, structured output
+            temperature=temperature # Use the dynamically set temperature
         )
         review_text = completion.choices[0].message.content
 
