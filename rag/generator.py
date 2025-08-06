@@ -83,7 +83,7 @@ JSON Response:"""
             temperature = 0.5
             prompt = f"""You are a highly intelligent SQL code review assistant. Your primary method of finding issues (rule-based retrieval) found no relevant rules for the following code.
 
-Therefore, you must now rely entirely on your own extensive knowledge of SQL best practices, performance tuning, and security to conduct a thorough review. These sql codes are written by well trained employees, hence don't include basic tips as suggestions rather go into advanced sql techniques or suggestions.   
+Therefore, you must now rely entirely on your own extensive knowledge of SQL best practices, performance tuning, and security to conduct a thorough review. These sql codes are written by skilled employees, hence don't include basic tips as suggestions rather go into advanced sql techniques or suggestions.   
 
 **Code to Review:**
 ```
@@ -103,7 +103,7 @@ JSON Response:"""
 
     try:
         completion = client.chat.completions.create(
-            model="local-model", # Use a model name recognized by your LM Studio server
+            model="llama-3.2-3b-instruct", # Use a model name recognized by your LM Studio server
             messages=[
                 {"role": "user", "content": prompt}
             ],

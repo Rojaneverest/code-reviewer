@@ -9,10 +9,19 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from config import DB_CONFIG
 
-# Initialize the sentence transformer model globally to avoid reloading it on every call
-print("Loading sentence transformer model...")
-model = SentenceTransformer('all-MiniLM-L6-v2')
-print("Model loaded.")
+model_path = r'C:\Users\RojanRajThapa\Desktop\huggingface\hub\models--sentence-transformers--all-MiniLM-L6-v2'
+
+# Initialize the sentence transformer model using the local path
+print("Loading sentence transformer model from local cache...")
+try:
+    model = SentenceTransformer(model_path)
+    print("Model loaded successfully.")
+except Exception as e:
+    print(f"An error occurred while loading the model: {e}")
+    model = None  # Safeguard for failed loading
+
+# Use an assertion to ensure the model is correctly loaded before using it
+assert model is not None, "Model failed to load, ensure the correct path and files exist."
 
 import re
 
