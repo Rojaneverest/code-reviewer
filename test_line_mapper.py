@@ -1,7 +1,7 @@
 from utils.line_mapper import map_sql_statements_to_lines
 
 # Define the path to the test SQL file
-file_path = 'test_code.sql'
+file_path = 'test_files/test_no_match.sql'
 
 print(f"--- Testing line mapper on {file_path} ---")
 
