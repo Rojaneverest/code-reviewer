@@ -6,6 +6,8 @@ from rag.retriever import find_relevant_rules
 from rag.generator import generate_review
 from utils.line_mapper import map_sql_statements_to_lines
 from utils.chunker import chunk_pyspark_file
+from datetime import datetime
+
 
 def analyze_code(file_path):
     """Analyzes a code file using the RAG model, processing it in chunks."""
@@ -62,10 +64,21 @@ def analyze_code(file_path):
         "issues": all_issues
     }
 
-    # 4. Print the final JSON report
     print("\n--- Code Review Report ---")
     print(json.dumps(final_report, indent=4))
     print("--- End of Report ---")
+
+    file_dir = 'outputs'
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    file_name = f"code_review_report_{timestamp}.json"
+    full_file_path = os.path.join(file_dir, file_name)
+
+    os.makedirs(file_dir, exist_ok=True)
+
+    with open(full_file_path, 'w') as json_file:
+        json.dump(final_report, json_file, indent=4)
+
+    print(f"Report saved successfully to {full_file_path}")
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='AI Code Review Agent')
