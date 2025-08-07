@@ -80,7 +80,7 @@ JSON Response:"""
         else:
             # This prompt is open-ended, asking the LLM to use its own knowledge when no rules are found.
             # We also increase the temperature to allow for more creative, non-deterministic responses.
-            temperature = 0.5
+            temperature = 0.7
             prompt = f"""You are a highly intelligent SQL code review assistant. Your primary method of finding issues (rule-based retrieval) found no relevant rules for the following code.
 
 Therefore, you must now rely entirely on your own extensive knowledge of SQL best practices, performance tuning, and security to conduct a thorough review. These sql codes are written by well trained employees, hence don't include basic tips as suggestions rather go into advanced sql techniques or suggestions.   

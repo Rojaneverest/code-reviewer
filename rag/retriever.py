@@ -16,7 +16,7 @@ print("Model loaded.")
 
 import re
 
-def find_relevant_rules(code_chunk, language='SQL', top_k=5, similarity_threshold=0.35):
+def find_relevant_rules(code_chunk, language='SQL', top_k=5, similarity_threshold=0.6):
     """Finds the most relevant rules for a code chunk using vector similarity search."""
     conn = None
     relevant_rules = {'good_practices': [], 'bad_practices': []}

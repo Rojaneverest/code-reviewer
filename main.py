@@ -67,6 +67,23 @@ def analyze_code(file_path):
     print(json.dumps(final_report, indent=4))
     print("--- End of Report ---")
 
+    # Prepare the directory and dynamic filename
+    file_dir = 'outputs'
+
+    # Format current date and time for the filename (e.g., 20231015_141530)
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    file_name = f"code_review_report_{timestamp}.json"
+    full_file_path = os.path.join(file_dir, file_name)
+
+    # Ensure the directory exists
+    os.makedirs(file_dir, exist_ok=True)
+
+    # Open the file in write mode to save the JSON report
+    with open(full_file_path, 'w') as json_file:
+        json.dump(final_report, json_file, indent=4)
+
+    print(f"Report saved successfully to {full_file_path}")
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='AI Code Review Agent')
     parser.add_argument('file_path', type=str, help='The path to the code file to be reviewed.')
