@@ -2,16 +2,43 @@ from openai import OpenAI
 import sys
 import os
 import json
+from dotenv import load_dotenv
 
 # Add the project root to the Python path
-project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-sys.path.insert(0, project_root)
+# project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+# sys.path.insert(0, project_root)
 
-from config import LM_STUDIO_CONFIG
+# from config import LM_STUDIO_CONFIG
 
-# Initialize the OpenAI client to connect to LM Studio
-client = OpenAI(base_url=LM_STUDIO_CONFIG['api_base'], api_key=LM_STUDIO_CONFIG['api_key'])
+# # Initialize the OpenAI client to connect to LM Studio
+# client = OpenAI(base_url=LM_STUDIO_CONFIG['api_base'], api_key=LM_STUDIO_CONFIG['api_key'])
 
+load_dotenv()
+
+DATABRICKS_TOKEN = os.environ.get('DATABRICKS_TOKEN')
+if DATABRICKS_TOKEN is None:
+    raise ValueError("DATABRICKS_TOKEN environment variable is not set.")
+
+# Initialize the OpenAI client using Databricks as the host
+client = OpenAI(
+    api_key=DATABRICKS_TOKEN,
+    base_url="https://dbc-3735add4-1cb6.cloud.databricks.com/serving-endpoints"
+)
+
+def call_databricks_llm(prompt, temperature):
+    try:
+        completion = client.chat.completions.create(
+            model="databricks-gpt-oss-120b",
+            messages=[
+                {"role": "user", "content": prompt}
+            ],
+            temperature=temperature  # Adjust as needed
+        )
+        return completion.choices[0].message.content
+    except Exception as e:
+        print(f"Error connecting to Databricks LLM: {e}")
+        return None
+    
 def generate_review(code_chunk, rules, retrieval_method="Vector Search"):
     """Generates a code review in a structured JSON format by calling the LM Studio model."""
     
