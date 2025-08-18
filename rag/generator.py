@@ -15,7 +15,7 @@ def call_databricks_llm(prompt, temperature=0.0):
         "Content-Type": "application/json"
     }
     
-    endpoint_name = "databricks-gpt-oss-120b"
+    endpoint_name = "databricks-claude-sonnet-4"
     url = f"https://dbc-3735add4-1cb6.cloud.databricks.com/serving-endpoints/{endpoint_name}/invocations"
     
     data = {

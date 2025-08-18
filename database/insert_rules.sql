@@ -24,4 +24,30 @@ VALUES
     ('Use UNION ALL over UNION', 'Use UNION ALL if you do not need to remove duplicate rows, as it is more performant.', 'union\s+all', 'Minor', 'SQL', 'Performance', 'good'),
     ('Use table aliases', 'Using table aliases improves readability in queries with multiple tables.', 'as\s+[a-zA-Z_]', 'Minor', 'SQL', 'Clarity', 'good'),
     ('Use CASE for conditional logic', 'The CASE statement is the standard way to handle conditional logic within SQL queries.', 'case\s+when', 'Minor', 'SQL', 'Clarity', 'good'),
-    ('Comment complex queries', 'Adding comments (--) to explain complex logic improves maintainability.', '--', 'Minor', 'SQL', 'Clarity', 'good');
+    ('Comment complex queries', 'Adding comments (--) to explain complex logic improves maintainability.', '--', 'Minor', 'SQL', 'Clarity', 'good'),
+    ('Avoid storing SSN in plain text', 'Social Security Numbers must be encrypted or hashed when stored in healthcare systems for HIPAA compliance.', '(?i)(create|alter)\s+table.*ssn\s+(?:varchar|char|text)', 'Critical', 'SQL', 'Security', 'bad'),
+    ('Avoid unencrypted patient identifiers', 'Patient identifiers like MRN, SSN, or DOB should be encrypted in healthcare databases.', '(?i)(create|alter)\s+table.*(?:patient_id|mrn|medical_record_number|date_of_birth|dob)\s+(?:varchar|char|text|date)(?!\s+encrypted)', 'Critical', 'SQL', 'Security', 'bad'),
+    ('Missing audit columns on patient tables', 'Healthcare data tables must have audit columns (created_by, modified_by, created_at, modified_at) for compliance.', '(?i)create\s+table\s+(?:patient|diagnosis|medication|encounter)(?!.*(?:created_by|modified_by))', 'Major', 'SQL', 'Compliance', 'bad'),
+    
+    -- Data Modification Bad Practices
+    ('Direct UPDATE on diagnosis codes', 'Diagnosis codes (ICD-10/CPT) should not be directly updated. Use versioning or audit trails instead.', '(?i)update\s+(?:diagnosis|icd|cpt|procedure_codes?).*set\s+(?:code|icd_code|cpt_code)', 'Critical', 'SQL', 'Data Integrity', 'bad'),
+    ('DELETE patient records without archiving', 'Patient records should be archived, not deleted, to maintain medical history and comply with retention policies.', '(?i)delete\s+from\s+(?:patient|encounter|diagnosis|medication|lab_result)', 'Critical', 'SQL', 'Compliance', 'bad'),
+    ('Bulk UPDATE on clinical data', 'Bulk updates on clinical data without WHERE clause can compromise patient safety and data integrity.', '(?i)update\s+(?:medication|dosage|lab_result|vital_signs?|allerg(?:y|ies))(?:\s+set)?(?!.*where)', 'Critical', 'SQL', 'Data Integrity', 'bad'),
+    
+    -- Specific Column Alteration Rules
+    ('ALTER medication dosage columns', 'Changing medication dosage column types can lead to precision loss and patient safety issues.', '(?i)alter\s+table\s+\w*(?:medication|prescription|drug)\w*.*(?:modify|alter)\s+column\s+\w*(?:dose|dosage|quantity)\w*', 'Critical', 'SQL', 'Data Integrity', 'bad'),
+    ('DROP COLUMN on clinical tables', 'Dropping columns from clinical tables can violate data retention requirements.', '(?i)alter\s+table\s+(?:patient|diagnosis|medication|lab_result|encounter).*drop\s+column', 'Major', 'SQL', 'Compliance', 'bad'),
+    ('FLOAT for medication dosages', 'Use DECIMAL for medication dosages instead of FLOAT to avoid precision errors that could affect patient safety.', '(?i)(?:create|alter)\s+table.*(?:dose|dosage|quantity)\s+float', 'Critical', 'SQL', 'Data Integrity', 'bad'),
+    
+    -- Good Practices for Health Data
+    ('Use encryption for PHI', 'Personal Health Information should be encrypted using appropriate encryption functions.', '(?i)(?:aes_encrypt|encrypt|hashbytes)', 'Minor', 'SQL', 'Security', 'good'),
+    ('Audit trail implementation', 'Using triggers or temporal tables for audit trails on sensitive health data.', '(?i)(?:create\s+trigger.*for\s+(?:insert|update|delete)|temporal_table|system_versioning)', 'Minor', 'SQL', 'Compliance', 'good'),
+    ('Parameterized queries for patient data', 'Using parameterized queries (@param or ?) prevents SQL injection when handling patient data.', '(?:@\w+|\\?)', 'Minor', 'SQL', 'Security', 'good'),
+    
+    -- Data Quality Rules
+    ('NULL values in critical health fields', 'Critical fields like blood type, allergies, or emergency contact should have NOT NULL constraints.', '(?i)create\s+table.*(?:blood_type|allerg(?:y|ies)|emergency_contact)(?!.*not\s+null)', 'Major', 'SQL', 'Data Integrity', 'bad'),
+    ('Missing check constraints on vital signs', 'Vital signs should have reasonable check constraints (e.g., heart rate between 0-300).', '(?i)create\s+table.*(?:heart_rate|blood_pressure|temperature|weight)(?!.*check)', 'Major', 'SQL', 'Data Integrity', 'bad'),
+    
+    -- Performance specific to health data
+    ('Missing index on patient lookup columns', 'Common lookup columns (MRN, SSN, patient_id) should be indexed for performance.', '(?i)create\s+table\s+patient(?!.*(?:create\s+index|index\s+on).*(?:mrn|patient_id|ssn))', 'Major', 'SQL', 'Performance', 'bad'),
+    ('Joining large clinical tables without filters', 'Joining encounter/diagnosis tables without date filters can cause performance issues.', '(?i)join\s+(?:encounter|diagnosis|lab_result)(?!.*where.*(?:date|created_at|encounter_date))', 'Major', 'SQL', 'Performance', 'bad');
