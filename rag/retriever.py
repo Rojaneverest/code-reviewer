@@ -9,6 +9,7 @@ from typing import Dict, List, Tuple, Optional
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from config import DB_CONFIG
+from .ai_analyzer import get_ai_suggestions
 
 model_path = r'C:\Users\RojanRajThapa\Desktop\huggingface\hub\models--sentence-transformers--all-MiniLM-L6-v2'
 
@@ -104,7 +105,7 @@ def combine_and_rank_matches(regex_matches: List[Dict], semantic_matches: List[D
 def find_relevant_rules(code_chunk: str, language: str = 'SQL', top_k: int = 3, 
                        similarity_threshold: float = 0.55) -> Tuple[Dict[str, List], str]:
     """
-    Find relevant rules using both regex and semantic matching approaches.
+    Find relevant rules using regex and semantic matching.
     
     Args:
         code_chunk: The code to analyze
@@ -138,15 +139,15 @@ def find_relevant_rules(code_chunk: str, language: str = 'SQL', top_k: int = 3,
             else:
                 relevant_rules['good_practices'].append(match)
         
-        # 4. Determine the method used
+        # 4. Determine the method used - this will affect the prompt in generator.py
         if regex_matches and semantic_matches:
             method = "Hybrid Match"
         elif regex_matches:
             method = "Regex Match"
         elif semantic_matches:
-            method = "Semantic Match"
+            method = "Vector Search"  # Keep this name to match generator.py's logic
         else:
-            method = "No Matches"
+            method = "No Matches"  # This will trigger the creative AI analysis in generator.py
             
         match_counts = {
             'regex': len(regex_matches),

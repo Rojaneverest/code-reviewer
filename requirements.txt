@@ -6,3 +6,4 @@ sqlparse
 openai
 sentence-transformers
 dotenv
+llama-cpp-python
