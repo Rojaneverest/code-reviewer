@@ -9,7 +9,6 @@ from typing import Dict, List, Tuple, Optional
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from config import DB_CONFIG
-from .ai_analyzer import get_ai_suggestions
 
 model_path = r'C:\Users\RojanRajThapa\Desktop\huggingface\hub\models--sentence-transformers--all-MiniLM-L6-v2'
 
