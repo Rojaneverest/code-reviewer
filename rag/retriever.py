@@ -9,7 +9,6 @@ from typing import Dict, List, Tuple, Optional
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from config import DB_CONFIG
-from .ai_analyzer import get_ai_suggestions
 
 model_path = r'C:\Users\RojanRajThapa\Desktop\huggingface\hub\models--sentence-transformers--all-MiniLM-L6-v2'
 
@@ -103,7 +102,7 @@ def combine_and_rank_matches(regex_matches: List[Dict], semantic_matches: List[D
     return combined_matches[:top_k]
 
 def find_relevant_rules(code_chunk: str, language: str = 'SQL', top_k: int = 3, 
-                       similarity_threshold: float = 0.55) -> Tuple[Dict[str, List], str]:
+                       similarity_threshold: float = 0.65) -> Tuple[Dict[str, List], str]:
     """
     Find relevant rules using regex and semantic matching.
     
@@ -118,53 +117,85 @@ def find_relevant_rules(code_chunk: str, language: str = 'SQL', top_k: int = 3,
     """
     conn = None
     relevant_rules = {'good_practices': [], 'bad_practices': []}
-    
+    matched_bad_rules = []
+
     try:
         conn = psycopg2.connect(**DB_CONFIG)
         cur = conn.cursor()
 
-        # 1. Get matches from both approaches
-        print(f"\nAnalyzing code chunk using hybrid approach...\n---\n{code_chunk[:200]}...\n---")
+        # 1. Hybrid Approach: First, try to find direct violations with regex
+        print(f"\nRunning regex search for bad practices...\n---\n{code_chunk[:200]}...\n---")
+        cur.execute(
+            "SELECT id, title, description, code_pattern, severity, practice_type, category FROM rules WHERE language = %s AND practice_type = 'bad' AND code_pattern IS NOT NULL;",
+            (language,)
+        )
+        bad_practice_rules = cur.fetchall()
+
+        for rule_id, title, description, code_pattern, severity, _, category in bad_practice_rules:
+            if re.search(code_pattern, code_chunk, re.IGNORECASE):
+                matched_bad_rules.append({
+                    'id': rule_id, 'title': title, 'description': description, 
+                    'severity': severity, 'practice_type': 'bad', 'category': category
+                })
         
-        regex_matches = find_regex_matches(code_chunk, cur, language)
-        semantic_matches = find_semantic_matches(code_chunk, cur, language, similarity_threshold)
+        # If any regex matches were found, add them to the list. The process will continue to the vector search.
+        if matched_bad_rules:
+            print(f"Found {len(matched_bad_rules)} direct violation(s) via regex.")
+            relevant_rules['bad_practices'].extend(matched_bad_rules)
+            # Do not return here; continue to vector search to find other potential issues.
+
+        # 2. Always proceed to vector search for additional semantic relevance
+        print("Proceeding to vector similarity search for additional rules...")
+        code_embedding = model.encode(code_chunk, convert_to_tensor=False)
+        cur.execute(
+            "SELECT id, title, description, severity, practice_type, category, vector FROM rules WHERE language = %s AND vector IS NOT NULL;",
+            (language,)
+        )
+        rules_data = cur.fetchall()
         
-        # 2. Combine and rank the matches
-        combined_matches = combine_and_rank_matches(regex_matches, semantic_matches, top_k)
-        
-        # 3. Organize results by practice type
-        for match in combined_matches:
-            if match['practice_type'] == 'bad':
-                relevant_rules['bad_practices'].append(match)
+        if not rules_data:
+            print("No vectorized rules found.")
+            # If regex found something, we can still return that.
+            log_method = "Regex Match" if matched_bad_rules else "Vector Search"
+            return relevant_rules, log_method
+
+        rule_similarities = []
+        for rule in rules_data:
+            rule_id, title, description, severity, practice_type, category, vector = rule
+            if vector:
+                # Avoid adding duplicate rules if found by both regex and vector search
+                if any(r['id'] == rule_id for r in relevant_rules['bad_practices']):
+                    continue
+
+                similarity = np.dot(code_embedding, np.array(vector)) / (np.linalg.norm(code_embedding) * np.linalg.norm(np.array(vector)))
+                if similarity > similarity_threshold:
+                    rule_similarities.append((similarity, {
+                        'id': rule_id, 'title': title, 'description': description,
+                        'severity': severity, 'practice_type': practice_type, 'category': category
+                    }))
+
+        rule_similarities.sort(key=lambda x: x[0], reverse=True)
+        top_rules = [rule for _, rule in rule_similarities[:top_k]]
+
+        print(f"Found {len(top_rules)} semantically relevant rules with similarity > {similarity_threshold}.")
+
+        for rule in top_rules:
+            if rule['practice_type'] == 'bad':
+                relevant_rules['bad_practices'].append(rule)
             else:
-                relevant_rules['good_practices'].append(match)
+                relevant_rules['good_practices'].append(rule)
         
-        # 4. Determine the method used - this will affect the prompt in generator.py
-        if regex_matches and semantic_matches:
-            method = "Hybrid Match"
-        elif regex_matches:
-            method = "Regex Match"
-        elif semantic_matches:
-            method = "Vector Search"  # Keep this name to match generator.py's logic
-        else:
-            method = "No Matches"  # This will trigger the creative AI analysis in generator.py
-            
-        match_counts = {
-            'regex': len(regex_matches),
-            'semantic': len(semantic_matches),
-            'combined': len(combined_matches)
-        }
-        print(f"Found {match_counts['regex']} regex matches and {match_counts['semantic']} semantic matches.")
-        print(f"After combining and ranking: {match_counts['combined']} total matches.")
-        
-        return relevant_rules, method
+        # Determine the log method based on what was found
+        log_method = "Hybrid Search" if matched_bad_rules and top_rules else ("Regex Match" if matched_bad_rules else "Vector Search")
+
+        return relevant_rules, log_method
 
     except psycopg2.Error as e:
         print(f"Database error: {e}")
-        return relevant_rules, "Error"
+        return {'good_practices': [], 'bad_practices': []}, "Error"
     except Exception as e:
         print(f"An unexpected error occurred: {e}")
-        return relevant_rules, "Error"
+        return {'good_practices': [], 'bad_practices': []}, "Error"
     finally:
-        if conn is not None:
+        if conn:
             conn.close()
