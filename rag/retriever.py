@@ -141,7 +141,7 @@ def find_relevant_rules(code_chunk: str, language: str = 'SQL', top_k: int = 3,
 
         # 2. Always proceed to vector search for additional semantic relevance
         print("Proceeding to vector similarity search for additional rules...")
-        code_embedding = model.encode(code_chunk, convert_to_tensor=False)
+        code_embedding = vectorize_sql_code(code_chunk)
         cur.execute(
             "SELECT id, title, description, severity, practice_type, category, vector FROM rules WHERE language = %s AND vector IS NOT NULL;",
             (language,)
