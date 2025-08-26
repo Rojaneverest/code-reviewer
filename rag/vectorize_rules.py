@@ -59,9 +59,21 @@ class CodeEmbedder:
                 return_tensors="pt"
             ).to(self.device)
             
-            outputs = self.model(**inputs)
-            # Use the [CLS] token embedding as the sequence representation
-            embeddings = outputs.last_hidden_state[:, 0, :].cpu().numpy()
+            # Add empty decoder_input_ids
+            decoder_input_ids = torch.zeros(
+                (inputs.input_ids.shape[0], 1), 
+                dtype=torch.long, 
+                device=self.device
+            )
+            
+            outputs = self.model(
+                **inputs,
+                decoder_input_ids=decoder_input_ids,
+                output_hidden_states=True
+            )
+            
+            # Use the last hidden state of the encoder as embeddings
+            embeddings = outputs.encoder_last_hidden_state.mean(dim=1).cpu().numpy()
             
             # Normalize the vector
             normalized_embedding = embeddings[0] / np.linalg.norm(embeddings[0])
