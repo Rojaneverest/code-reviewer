@@ -51,10 +51,11 @@ def analyze_code(file_path):
         if review and review.get('issues_found', 0) > 0:
             # Adjust line numbers to be relative to the entire file
             for issue in review['issues']:
-                # The 'start_line' from the chunk is the correct, absolute line number.
-                # The LLM might return a relative line number, but for single-line chunks, it's always 1.
-                # So, we can just use the start_line.
-                issue['line_number'] = start_line
+                # The LLM returns a line number relative to the chunk.
+                # Add the chunk's starting line number (and subtract 1 because line numbers are 1-based)
+                # to get the absolute line number in the file.
+                relative_line = issue.get('line_number', 1)
+                issue['line_number'] = start_line + relative_line - 1
             all_issues.extend(review['issues'])
 
     # 3. Assemble the final JSON report

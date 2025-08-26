@@ -79,12 +79,10 @@ def generate_review(code_chunk, rules, retrieval_method="Vector Search"):
 ```
 
 **Task:**
-Your task is to review the code and confirm each violation from the list of 'Bad Practices Found by Regex'.
-
-Your response MUST be a single, valid JSON object. The JSON should contain a list of all confirmed issues. For each issue, provide **only** these four keys: `line_number` (relative to the chunk), `severity`, `rule_id`, and `suggestion`.
-
-If you cannot confirm any of the violations, you MUST return this exact JSON object:
-{{"issues_found": 0, "issues": []}}
+1.  Your task is to review the code and confirm each violation from the list of 'Bad Practices Found by Regex'.
+2.  Your response MUST be a single, valid JSON object. The JSON should contain a list of all confirmed issues.
+3.  For each issue, provide **only** these four keys: `line_number` (relative to the chunk), `severity`, `rule_id`, and `suggestion`. **Do not add any other keys.**
+4.  If you cannot confirm any of the violations, you MUST return this exact JSON object: `{{"issues_found": 0, "issues": []}}`
 
 JSON Response:"""
     else:  # Vector Search
@@ -104,18 +102,15 @@ JSON Response:"""
 
 **Task:**
 1.  **Critically evaluate** the 'Code to Review' against each of the 'Potential Bad Practices'.
-2.  If you find a genuine violation, create a JSON object with the issue details (line number, severity, rule ID, suggestion).
+2.  If you find a genuine violation, create a JSON object with the issue details. **Provide concise, actionable suggestions.**
 3.  **Crucially, if the code does NOT violate any of the listed bad practices, you MUST return an empty list of issues.**
-
-Your response MUST be a single, valid JSON object. If no violations are found, return this exact JSON object:
-{{"issues_found": 0, "issues": []}}
+4.  Your response MUST be a single, valid JSON object. If no violations are found, return this exact JSON object: `{{"issues_found": 0, "issues": []}}`
+5.  Each issue object MUST contain **only** these four keys: `line_number` (relative to the chunk), `severity`, `rule_id`, and `suggestion`. **Do not add any other keys.**
 
 JSON Response:"""
         else:
             temperature = 0.75
-            prompt = f"""You are a highly intelligent SQL code review assistant. Your primary method of finding issues (rule-based retrieval) found no relevant rules for the following code.
-
-Therefore, you must now rely entirely on your own extensive knowledge of SQL best practices, performance tuning, and security to conduct a thorough review. These sql codes are written by skilled employees, hence don't include basic tips as suggestions rather go into advanced sql techniques or suggestions.   
+            prompt = f"""You are a highly intelligent SQL code review assistant. Your primary method of finding issues (rule-based retrieval) found no relevant rules for the following code. Therefore, you must now rely entirely on your own extensive knowledge of SQL best practices to conduct a thorough review. The SQL code is written by skilled developers, so focus on advanced techniques and suggestions rather than basic tips.
 
 **Code to Review:**
 ```
@@ -124,12 +119,24 @@ Therefore, you must now rely entirely on your own extensive knowledge of SQL bes
 
 **Task:**
 1.  **Analyze the code creatively and critically.** Look for anti-patterns, performance bottlenecks (like correlated subqueries), or security risks that may not be in a standard rulebook.
-2.  If you identify any issues, create a JSON object describing them.
-3.  For each issue, provide **only** these three keys: `line_number` (relative to the chunk), `severity` (use the special value "AI Generated Suggestion"), and `suggestion`.
-4.  **Do not include a `rule_id`.**
+2.  **Be concise and group related feedback.** If multiple suggestions apply to the same issue, combine them into a single, comprehensive suggestion. Aim to provide a maximum of three distinct, high-impact suggestions for the code chunk.
+3.  If you identify any issues, create a JSON object describing them. Your response MUST be a single, valid JSON object.
+4.  For each issue, provide **only** these three keys: `line_number` (relative to the chunk), `severity` (use "AI Generated Suggestion"), and `suggestion`. **Do not include a `rule_id` or any other keys.**
+5.  If you find no issues, you MUST return this exact JSON object: `{{"issues_found": 0, "issues": []}}`
 
-Your response MUST be a single, valid JSON object. If you find no issues, you MUST return this exact JSON object:
-{{"issues_found": 0, "issues": []}}
+**Example of a valid response:**
+```json
+{{
+  "issues_found": 1,
+  "issues": [
+    {{
+      "line_number": 5,
+      "severity": "AI Generated Suggestion",
+      "suggestion": "Consider replacing the correlated subquery with an INNER JOIN for potentially better performance, as it can leverage hash joins more effectively."
+    }}
+  ]
+}}
+```
 
 JSON Response:"""
 
