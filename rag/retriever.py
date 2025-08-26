@@ -1,28 +1,22 @@
 import psycopg2
 import numpy as np
-from sentence_transformers import SentenceTransformer
 import sys
 import os
+import logging
 from typing import Dict, List, Tuple, Optional
+from .vectorize_rules import CodeEmbedder, vectorize_sql_code
 
 # Add project root to the Python path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from config import DB_CONFIG
 
-model_path = r'C:\Users\RojanRajThapa\Desktop\huggingface\hub\models--sentence-transformers--all-MiniLM-L6-v2'
-
-# Initialize the sentence transformer model using the local path
-print("Loading sentence transformer model from local cache...")
-try:
-    model = SentenceTransformer(model_path)
-    print("Model loaded successfully.")
-except Exception as e:
-    print(f"An error occurred while loading the model: {e}")
-    model = None  # Safeguard for failed loading
-
-# Use an assertion to ensure the model is correctly loaded before using it
-assert model is not None, "Model failed to load, ensure the correct path and files exist."
+# Set up logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
 
 import re
 
@@ -56,7 +50,8 @@ def find_semantic_matches(code_chunk: str, cur, language: str, similarity_thresh
     """Find rules that match the code chunk using semantic similarity."""
     semantic_matches = []
     
-    code_embedding = model.encode(code_chunk, convert_to_tensor=False)
+    # Use the same CodeT5 model for code embedding
+    code_embedding = vectorize_sql_code(code_chunk)
     cur.execute(
         "SELECT id, title, description, severity, practice_type, category, vector "
         "FROM rules WHERE language = %s AND vector IS NOT NULL;",

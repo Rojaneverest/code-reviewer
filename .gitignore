@@ -23,6 +23,10 @@ wheels/
 .installed.cfg
 *.egg
 
+# Local model files
+models/codet5-small/
+models/codet5p-220m/
+
 # PyInstaller
 #  Usually these files are written by a python script from a template
 #  before PyInstaller builds the exe, so as to inject date/other infos into it.

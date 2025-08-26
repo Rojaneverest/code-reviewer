@@ -32,9 +32,10 @@ def setup_database():
             severity TEXT NOT NULL,
             title TEXT NOT NULL,
             description TEXT NOT NULL,
+            example_snippet TEXT,
             practice_type TEXT NOT NULL DEFAULT 'bad',
             last_updated_utc TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            vector FLOAT[],  -- Add the vector column here
+            vector FLOAT[],  -- Stores CodeT5 embeddings
             UNIQUE (language, title)
         );
         """)
