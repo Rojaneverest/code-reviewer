@@ -164,11 +164,11 @@ def test_environment_variables():
         
         # Check if environment variables would override config.py values
         env_overrides = {}
-        if os.getenv('DB_HOST'): env_overrides['host'] = os.getenv('DB_HOST')
-        if os.getenv('DB_NAME'): env_overrides['dbname'] = os.getenv('DB_NAME')
-        if os.getenv('DB_USER'): env_overrides['user'] = os.getenv('DB_USER')
-        if os.getenv('DB_PASSWORD'): env_overrides['password'] = os.getenv('DB_PASSWORD')
-        if os.getenv('DB_PORT'): env_overrides['port'] = os.getenv('DB_PORT')
+        if os.getenv('host'): env_overrides['host'] = os.getenv('host')
+        if os.getenv('dbname'): env_overrides['dbname'] = os.getenv('dbname')
+        if os.getenv('user'): env_overrides['user'] = os.getenv('user')
+        if os.getenv('password'): env_overrides['password'] = os.getenv('password')
+        if os.getenv('port'): env_overrides['port'] = os.getenv('port')
         
         if env_overrides:
             print("\n⚠️  Note: Environment variables will override config.py values:")

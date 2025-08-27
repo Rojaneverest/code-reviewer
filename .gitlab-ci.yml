@@ -6,8 +6,17 @@ stages:
   - test
   - sql-review
 
+# PostgreSQL service for CI environment
+services:
+  - postgres:13
+
 variables:
   PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
+  # PostgreSQL service configuration
+  POSTGRES_DB: rules
+  POSTGRES_USER: postgres
+  POSTGRES_PASSWORD: root
+  POSTGRES_HOST_AUTH_METHOD: trust
 
 cache:
   paths:
@@ -28,15 +37,21 @@ precheck-gitlab-env:
 sql-code-review:
   stage: sql-review
   image: python:3.9
+  services:
+    - postgres:13
   needs: [precheck-gitlab-env]
   before_script:
+    - apt-get update -qq && apt-get install -y -qq postgresql-client
     - python -m venv venv
     - source venv/bin/activate
     - pip install --upgrade pip
     - pip install -r requirements.txt
+    # Initialize database with SQL rules and vectorization
+    - echo "🔧 Setting up PostgreSQL with SQL rules and embeddings..."
+    - python setup_ci_database.py
   script:
     - source venv/bin/activate
-    - echo "Analyzing SQL changes in merge request..."
+    - echo "🔍 Analyzing SQL changes in merge request..."
     - python gitlab_ci_analyzer.py
   artifacts:
     paths:

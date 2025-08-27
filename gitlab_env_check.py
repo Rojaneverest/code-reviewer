@@ -31,8 +31,8 @@ def check_gitlab_ci_variables():
             'expected_prefix': 'glpat-'
         },
         'host': {
-            'description': 'PostgreSQL database host',
-            'fallback': 'localhost'
+            'description': 'PostgreSQL database host (should be "postgres" in GitLab CI)',
+            'fallback': 'postgres'
         },
         'dbname': {
             'description': 'PostgreSQL database name',
@@ -45,6 +45,10 @@ def check_gitlab_ci_variables():
         'password': {
             'description': 'PostgreSQL database password',
             'fallback': None
+        },
+        'port': {
+            'description': 'PostgreSQL database port',
+            'fallback': '5432'
         }
     }
     

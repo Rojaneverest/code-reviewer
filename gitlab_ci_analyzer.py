@@ -32,33 +32,64 @@ def get_gitlab_env_vars():
 def get_changed_files(target_branch: str, source_branch: str) -> List[str]:
     """Get list of changed .sql files between two branches."""
     try:
-        # Fetch the target branch to ensure we have the latest
-        subprocess.run(['git', 'fetch', 'origin', target_branch], check=True, capture_output=True)
+        # First, fetch all remotes to ensure we have the latest refs
+        print(f"Fetching remote branches...")
+        subprocess.run(['git', 'fetch', 'origin'], check=True, capture_output=True)
         
-        result = subprocess.run(
+        # Try different git diff strategies
+        diff_commands = [
             ['git', 'diff', '--name-only', f'origin/{target_branch}...HEAD'],
-            capture_output=True, text=True, check=True
-        )
+            ['git', 'diff', '--name-only', f'{target_branch}...HEAD'],
+            ['git', 'diff', '--name-only', f'origin/{target_branch}', 'HEAD'],
+            ['git', 'diff', '--name-only', 'HEAD~1', 'HEAD']  # Fallback: compare with previous commit
+        ]
         
-        all_files = result.stdout.strip().split('\n') if result.stdout.strip() else []
-        sql_files = [f for f in all_files if f.endswith('.sql') and f.strip()]
+        for i, cmd in enumerate(diff_commands):
+            try:
+                print(f"Trying git diff strategy {i+1}: {' '.join(cmd)}")
+                result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+                
+                all_files = result.stdout.strip().split('\n') if result.stdout.strip() else []
+                sql_files = [f for f in all_files if f.endswith('.sql') and f.strip()]
+                
+                print(f"✅ Strategy {i+1} worked! Found {len(sql_files)} changed SQL files:")
+                for file in sql_files:
+                    print(f"  - {file}")
+                
+                return sql_files
+                
+            except subprocess.CalledProcessError as e:
+                print(f"❌ Strategy {i+1} failed: {e}")
+                continue
         
-        print(f"Found {len(sql_files)} changed SQL files:")
-        for file in sql_files:
-            print(f"  - {file}")
+        # If all strategies fail, return empty list
+        print("⚠️  All git diff strategies failed. No files to analyze.")
+        return []
         
-        return sql_files
-    except subprocess.CalledProcessError as e:
-        print(f"Error getting changed files: {e}")
+    except Exception as e:
+        print(f"Error in get_changed_files: {e}")
         return []
 
 def get_changed_lines(file_path: str, target_branch: str, source_branch: str) -> List[int]:
     """Get line numbers that were added or modified in the source branch."""
     try:
-        result = subprocess.run(
+        # Try different git diff strategies for line changes
+        diff_commands = [
             ['git', 'diff', f'origin/{target_branch}...HEAD', '--', file_path],
-            capture_output=True, text=True, check=True
-        )
+            ['git', 'diff', f'{target_branch}...HEAD', '--', file_path],
+            ['git', 'diff', f'origin/{target_branch}', 'HEAD', '--', file_path],
+            ['git', 'diff', 'HEAD~1', 'HEAD', '--', file_path]  # Fallback
+        ]
+        
+        for cmd in diff_commands:
+            try:
+                result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+                break
+            except subprocess.CalledProcessError:
+                continue
+        else:
+            print(f"Warning: Could not get diff for {file_path}")
+            return []
         
         changed_lines = []
         current_new_line = 0
@@ -83,6 +114,9 @@ def get_changed_lines(file_path: str, target_branch: str, source_branch: str) ->
     
     except subprocess.CalledProcessError as e:
         print(f"Error getting changed lines for {file_path}: {e}")
+        return []
+    except Exception as e:
+        print(f"An unexpected error occurred while processing diff for {file_path}: {e}")
         return []
 
 def map_lines_to_statements(file_content: str, changed_lines: List[int]) -> List[Tuple[str, int, int]]:
@@ -236,6 +270,27 @@ def main():
     
     print(f"🔍 Analyzing changes from {source_branch} → {target_branch}")
     print(f"📋 Merge Request IID: {env_vars['CI_MERGE_REQUEST_IID']}")
+    
+    # Debug: Show git status
+    print("\n🔧 Git Debug Information:")
+    try:
+        # Show current branch and commit
+        current_branch = subprocess.run(['git', 'branch', '--show-current'], capture_output=True, text=True, check=True)
+        print(f"Current branch: {current_branch.stdout.strip()}")
+        
+        current_commit = subprocess.run(['git', 'rev-parse', 'HEAD'], capture_output=True, text=True, check=True)
+        print(f"Current commit: {current_commit.stdout.strip()}")
+        
+        # Show available branches
+        branches = subprocess.run(['git', 'branch', '-a'], capture_output=True, text=True, check=True)
+        print(f"Available branches:\n{branches.stdout}")
+        
+        # Show remotes
+        remotes = subprocess.run(['git', 'remote', '-v'], capture_output=True, text=True, check=True)
+        print(f"Git remotes:\n{remotes.stdout}")
+        
+    except subprocess.CalledProcessError as e:
+        print(f"Git debug failed: {e}")
     
     # Get changed SQL files
     changed_files = get_changed_files(target_branch, source_branch)

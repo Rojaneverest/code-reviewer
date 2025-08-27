@@ -24,9 +24,13 @@ def setup_database():
         # Create the rules table with the vector column
         print('Creating table "rules"...')
         cursor.execute("""
-        CREATE TABLE vector_rules (
+        CREATE TABLE IF NOT EXISTS rules (
             id SERIAL PRIMARY KEY,
-            title VARCHAR(255) NOT NULL,
+            code_pattern TEXT NOT NULL,
+            language TEXT NOT NULL,
+            category TEXT NOT NULL,
+            severity TEXT NOT NULL,
+            title TEXT NOT NULL,
             description TEXT NOT NULL,
             example_snippet TEXT,
             practice_type TEXT NOT NULL DEFAULT 'bad',
@@ -37,13 +41,13 @@ def setup_database():
         """)
 
         # Insert initial data from SQL file
-        print('Inserting initial data from "database/insert_vector_rules.sql"...')
-        sql_file_path = os.path.join(os.path.dirname(__file__), 'insert_vector_rules.sql')
+        print('Inserting initial data from "database/insert_rules.sql"...')
+        sql_file_path = os.path.join(os.path.dirname(__file__), 'insert_rules.sql')
         with open(sql_file_path, 'r') as f:
             cursor.execute(f.read())
 
         conn.commit()
-        print('Database setup for vector_rules completed successfully.')
+        print('Database setup completed successfully.')
 
     except psycopg2.Error as e:
         print(f"Database error: {e}")

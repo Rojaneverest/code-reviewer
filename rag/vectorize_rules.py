@@ -24,22 +24,18 @@ class CodeEmbedder:
     def __init__(self):
         """Initialize the CodeT5 model for code-aware embeddings."""
         self.model_name = "Salesforce/codet5p-220m"
-        self.local_model_path = r"C:\Users\RojanRajThapa\Desktop\huggingface\codet5p-220m"
         
-        # Download and save model if not exists
-        if not os.path.exists(self.local_model_path):
-            logger.info(f"Downloading {self.model_name} model and tokenizer...")
-            tokenizer = AutoTokenizer.from_pretrained(self.model_name)
-            model = AutoModel.from_pretrained(self.model_name)
-            
-            logger.info(f"Saving model and tokenizer to {self.local_model_path}")
-            tokenizer.save_pretrained(self.local_model_path)
-            model.save_pretrained(self.local_model_path)
+        # Use local models directory if available, otherwise download from HuggingFace
+        local_model_path = os.path.join(project_root, "models", "codet5p-220m")
         
-        # Load from local path
-        logger.info(f"Loading model and tokenizer from {self.local_model_path}")
-        self.tokenizer = AutoTokenizer.from_pretrained(self.local_model_path)
-        self.model = AutoModel.from_pretrained(self.local_model_path)
+        if os.path.exists(local_model_path):
+            logger.info(f"Loading model from local path: {local_model_path}")
+            self.tokenizer = AutoTokenizer.from_pretrained(local_model_path)
+            self.model = AutoModel.from_pretrained(local_model_path)
+        else:
+            logger.info(f"Local model not found. Downloading {self.model_name} from HuggingFace...")
+            self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
+            self.model = AutoModel.from_pretrained(self.model_name)
         
         # Move model to GPU if available
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
