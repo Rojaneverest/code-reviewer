@@ -9,6 +9,32 @@ from utils.chunker import chunk_pyspark_file
 from datetime import datetime
 
 
+def analyze_code_chunk(code_chunk, language='SQL'):
+    """Analyze a single code chunk and return issues."""
+    try:
+        # Strip the chunk of any leading/trailing whitespace
+        code_chunk = code_chunk.strip()
+        if not code_chunk:
+            return []
+
+        # Find relevant rules for the chunk using the hybrid retriever
+        relevant_rules, log_method = find_relevant_rules(code_chunk, language=language)
+
+        print(f"Processing chunk with: {log_method}")
+
+        # Generate a review for the chunk
+        review = generate_review(code_chunk, relevant_rules, log_method)
+        
+        if review and review.get('issues_found', 0) > 0:
+            return review['issues']
+        else:
+            return []
+            
+    except Exception as e:
+        print(f"Error analyzing code chunk: {e}")
+        return []
+
+
 def analyze_code(file_path):
     """Analyzes a code file using the RAG model, processing it in chunks."""
     try:
