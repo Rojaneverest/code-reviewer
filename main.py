@@ -32,6 +32,14 @@ def analyze_code_chunk(code_chunk, language='SQL'):
             
     except Exception as e:
         print(f"Error analyzing code chunk: {e}")
+        print("Attempting fallback AI analysis...")
+        try:
+            # Fallback to pure AI analysis if everything else fails
+            fallback_review = generate_review(code_chunk, {'good_practices': [], 'bad_practices': []}, "Database Unavailable - AI Fallback")
+            if fallback_review and fallback_review.get('issues_found', 0) > 0:
+                return fallback_review['issues']
+        except Exception as fallback_error:
+            print(f"Fallback analysis also failed: {fallback_error}")
         return []
 
 

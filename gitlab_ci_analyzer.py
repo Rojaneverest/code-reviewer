@@ -185,16 +185,41 @@ def analyze_sql_statements(statements_to_review: List[Tuple[str, int, int]]) -> 
 
 def format_gitlab_comment(results: Dict, changed_files: List[str]) -> str:
     """Format results as a GitLab merge request comment."""
+    
+    # Check if any issues were generated using AI fallback
+    ai_fallback_used = any(
+        issue.get('severity') == 'AI Generated Suggestion' or 
+        'AI Fallback' in str(issue.get('method', ''))
+        for issue in results['issues']
+    )
+    
+    # Check if database was unavailable
+    database_issues = any(
+        'Database Unavailable' in str(issue.get('method', '')) or
+        'Database Unavailable' in str(issue.get('severity', ''))
+        for issue in results['issues']
+    )
+    
     if results['total_issues'] == 0:
-        return """## 🎉 SQL Code Review - No Issues Found!
+        base_message = """## 🎉 SQL Code Review - No Issues Found!
 
-Your SQL changes look good! No code quality issues were detected.
+Your SQL changes look good! No code quality issues were detected."""
+        
+        if ai_fallback_used or database_issues:
+            base_message += """
 
-*Automated review by SQL Code Reviewer*"""
+⚠️ **Note**: Database connectivity issues were encountered during this review. Analysis was performed using AI-only review without access to the stored rule database. While comprehensive, you may want to retry the review later when database connectivity is restored for the most thorough rule-based analysis."""
+        
+        return base_message + "\n\n*Automated review by SQL Code Reviewer*"
     
     comment = f"""## 🔍 SQL Code Review Results
 
 Found **{results['total_issues']} issues** in {len(changed_files)} changed SQL file(s):
+
+"""
+    
+    if database_issues:
+        comment += """⚠️ **Database Connectivity Notice**: The rule database was unavailable during this review. Analysis was performed using advanced AI techniques to ensure your code is still thoroughly reviewed. For the most comprehensive rule-based analysis, you may want to retry when database connectivity is restored.
 
 """
     

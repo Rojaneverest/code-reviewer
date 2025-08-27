@@ -25,6 +25,7 @@ precheck-gitlab-env:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
 
 # Database connectivity check: validates Supabase connection
+# This job is allowed to fail - the pipeline will continue with AI-only analysis
 precheck-database:
   stage: database-check
   image: python:3.9
@@ -32,21 +33,22 @@ precheck-database:
   script:
     - pip install psycopg2-binary
     - python test_supabase_connection.py
+  allow_failure: true
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
 
-# SQL Code Review Job - runs only if all prechecks pass
+# SQL Code Review Job - runs regardless of database connectivity
 sql-code-review:
   stage: sql-review
   image: python:3.9
-  needs: [precheck-gitlab-env, precheck-database]
+  needs: [precheck-gitlab-env]
   before_script:
     - python -m venv venv
     - source venv/bin/activate
     - pip install --upgrade pip
     - pip install -r requirements.txt
-    - echo "🌟 Setting up cloud database with SQL rules and embeddings..."
-    - python cloud_db_setup.py
+    - echo "🌟 Attempting to set up cloud database with SQL rules and embeddings..."
+    - python resilient_db_setup.py
   script:
     - source venv/bin/activate
     - echo "🔍 Analyzing SQL changes in merge request..."

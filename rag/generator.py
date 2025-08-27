@@ -66,8 +66,42 @@ def generate_review(code_chunk, rules, retrieval_method="Vector Search"):
     # Default temperature for deterministic output
     temperature = 0.0
 
+    # Handle database unavailable scenarios - fallback to AI analysis
+    if retrieval_method in ["Database Unavailable - AI Fallback", "Rule Retrieval Failed - AI Fallback", "Error"]:
+        temperature = 0.75
+        prompt = f"""You are a highly intelligent SQL code review assistant. The rule-based retrieval system is currently unavailable (database connection issues), so you must rely entirely on your extensive knowledge of SQL best practices to conduct a thorough review.
+
+**Code to Review:**
+```
+{code_chunk}
+```
+
+**Task:**
+1.  **Analyze the code comprehensively using your knowledge.** Look for common SQL anti-patterns, performance issues, security vulnerabilities, and maintainability concerns.
+2.  **Focus on practical, actionable feedback.** Prioritize issues that could impact performance, security, or code maintainability.
+3.  **Be concise and group related feedback.** If multiple suggestions apply to the same issue, combine them into a single, comprehensive suggestion. Aim to provide a maximum of three distinct, high-impact suggestions for the code chunk.
+4.  If you identify any issues, create a JSON object describing them. Your response MUST be a single, valid JSON object.
+5.  For each issue, provide **only** these three keys: `line_number` (relative to the chunk), `severity` (use "AI Generated Suggestion"), and `suggestion`. **Do not include a `rule_id` or any other keys.**
+6.  If you find no issues, you MUST return this exact JSON object: `{{"issues_found": 0, "issues": []}}`
+
+**Example of a valid response:**
+```json
+{{
+  "issues_found": 1,
+  "issues": [
+    {{
+      "line_number": 5,
+      "severity": "AI Generated Suggestion",
+      "suggestion": "Consider replacing the correlated subquery with an INNER JOIN for potentially better performance, as it can leverage hash joins more effectively."
+    }}
+  ]
+}}
+```
+
+JSON Response:"""
+
     # Dynamically construct the prompt based on the retrieval method
-    if retrieval_method == "Regex Match":
+    elif retrieval_method == "Regex Match":
         prompt = f"""You are a precise code review assistant. A code snippet has been identified as potentially violating one or more bad practices via direct Regex Matches.
 
 **Bad Practices Found by Regex:**
@@ -85,7 +119,7 @@ def generate_review(code_chunk, rules, retrieval_method="Vector Search"):
 4.  If you cannot confirm any of the violations, you MUST return this exact JSON object: `{{"issues_found": 0, "issues": []}}`
 
 JSON Response:"""
-    else:  # Vector Search
+    else:  # Vector Search, Hybrid Match, No Matches
         if rules.get('bad_practices'):
             prompt = f"""You are a precise and discerning code review assistant. Your task is to carefully analyze a code snippet and determine if it violates any of the *potential* bad practices listed below. These rules were identified as potentially relevant through a semantic search, but they may not all be applicable.
 
