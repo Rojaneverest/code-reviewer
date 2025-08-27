@@ -1,75 +1,168 @@
 import psycopg2
 import numpy as np
-from sentence_transformers import SentenceTransformer
 import sys
 import os
+import logging
+from typing import Dict, List, Tuple
+from .vectorize_rules import vectorize_sql_code
 
 # Add project root to the Python path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from config import DB_CONFIG
 
-# Initialize the sentence transformer model globally to avoid reloading it on every call
-print("Loading sentence transformer model...")
-model = SentenceTransformer('all-MiniLM-L6-v2')
-print("Model loaded.")
+# Set up logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
 
-def find_relevant_rules(code_chunk, language='SQL', top_k=5, similarity_threshold=0.35):
-    """Finds the most relevant rules for a code chunk using vector similarity search."""
+import re
+
+def _find_regex_matches(code_chunk: str, cur, language: str) -> List[Dict]:
+    """Find rules that match the code chunk using regex patterns."""
+    matched_rules = []
+    
+    cur.execute("""
+        SELECT id, title, description, code_pattern, severity, practice_type, category 
+        FROM rules 
+        WHERE language = %s 
+        AND code_pattern IS NOT NULL;
+    """, (language,))
+    
+    rules = cur.fetchall()
+    
+    for rule_id, title, description, code_pattern, severity, practice_type, category in rules:
+        if re.search(code_pattern, code_chunk, re.IGNORECASE):
+            matched_rules.append({
+                'id': rule_id,
+                'title': title,
+                'description': description,
+                'severity': severity,
+                'practice_type': practice_type,
+                'category': category,
+                'match_type': 'regex',
+                'confidence': 1.0  # Regex matches have highest confidence
+            })
+    
+    return matched_rules
+
+def _find_semantic_matches(code_chunk: str, cur, language: str, similarity_threshold: float) -> List[Dict]:
+    """Find rules that match the code chunk using semantic similarity."""
+    code_embedding = vectorize_sql_code(code_chunk)
+    
+    cur.execute("""
+        SELECT id, title, description, severity, practice_type, category, vector 
+        FROM rules 
+        WHERE language = %s 
+        AND vector IS NOT NULL;
+    """, (language,))
+    
+    rules = cur.fetchall()
+    semantic_matches = []
+    
+    for rule in rules:
+        rule_id, title, description, severity, practice_type, category, vector = rule
+        if vector:
+            similarity = np.dot(code_embedding, np.array(vector)) / (
+                np.linalg.norm(code_embedding) * np.linalg.norm(np.array(vector))
+            )
+            if similarity > similarity_threshold:
+                semantic_matches.append({
+                    'id': rule_id,
+                    'title': title,
+                    'description': description,
+                    'severity': severity,
+                    'practice_type': practice_type,
+                    'category': category,
+                    'match_type': 'semantic',
+                    'confidence': float(similarity)
+                })
+    
+    return semantic_matches
+
+def _combine_and_rank_matches(regex_matches: List[Dict], semantic_matches: List[Dict], top_k: int = 3) -> List[Dict]:
+    """Combine and rank matches from both regex and semantic search."""
+    # Start with regex matches (they have highest confidence)
+    combined_matches = regex_matches.copy()
+    
+    # Add semantic matches that don't overlap with regex matches
+    seen_rule_ids = {rule['id'] for rule in regex_matches}
+    
+    for semantic_match in semantic_matches:
+        if semantic_match['id'] not in seen_rule_ids:
+            combined_matches.append(semantic_match)
+            seen_rule_ids.add(semantic_match['id'])
+    
+    # Sort by confidence score
+    combined_matches.sort(key=lambda x: x['confidence'], reverse=True)
+    
+    return combined_matches[:top_k]
+
+def find_relevant_rules(code_chunk: str, language: str = 'SQL', top_k: int = 3, 
+                       similarity_threshold: float = 0.65) -> Tuple[Dict[str, List], str]:
+    """
+    Find relevant rules using regex and semantic matching.
+    
+    Args:
+        code_chunk: The code to analyze
+        language: Programming language ('SQL' or 'PySpark')
+        top_k: Maximum number of rules to return
+        similarity_threshold: Minimum similarity score for semantic matches
+    
+    Returns:
+        Tuple of (relevant_rules dict, method_used string)
+    """
     conn = None
-    relevant_rules = [] # Simplified to a single list
-
+    relevant_rules = {'good_practices': [], 'bad_practices': []}
+    
     try:
         conn = psycopg2.connect(**DB_CONFIG)
         cur = conn.cursor()
 
-        # Perform vector search for semantic relevance against the new table
-        print(f"\nRunning vector similarity search...\n---\n{code_chunk[:200]}...\n---")
-        code_embedding = model.encode(code_chunk, convert_to_tensor=False)
+        # 1. Get matches from both approaches
+        logger.info(f"\nAnalyzing code chunk using hybrid approach...\n---\n{code_chunk[:200]}...\n---")
         
-        # Query the new vector_rules table
-        cur.execute(
-            "SELECT id, title, description, severity, category, suggestion, vector FROM vector_rules WHERE language = %s AND vector IS NOT NULL;",
-            (language,)
-        )
-        rules_data = cur.fetchall()
+        regex_matches = _find_regex_matches(code_chunk, cur, language)
+        semantic_matches = _find_semantic_matches(code_chunk, cur, language, similarity_threshold)
         
-        if not rules_data:
-            print("No vectorized rules found in 'vector_rules' table.")
-            return relevant_rules
-
-        rule_similarities = []
-        for rule in rules_data:
-            rule_id, title, description, severity, category, suggestion, vector = rule
-            if vector:
-                # Calculate cosine similarity
-                similarity = np.dot(code_embedding, np.array(vector)) / (np.linalg.norm(code_embedding) * np.linalg.norm(np.array(vector)))
-                if similarity > similarity_threshold:
-                    rule_similarities.append((similarity, {
-                        'id': rule_id, 
-                        'title': title, 
-                        'description': description,
-                        'severity': severity, 
-                        'category': category,
-                        'suggestion': suggestion
-                    }))
-
-        # Sort by similarity and get the top_k results
-        rule_similarities.sort(key=lambda x: x[0], reverse=True)
-        relevant_rules = [rule for _, rule in rule_similarities[:top_k]]
-
-        print(f"Found {len(relevant_rules)} semantically relevant rules with similarity > {similarity_threshold}.")
-        for rule in relevant_rules:
-            print(f"  -> Found relevant rule: '{rule['title']}'")
-
-        return relevant_rules
+        # 2. Combine and rank the matches
+        combined_matches = _combine_and_rank_matches(regex_matches, semantic_matches, top_k)
+        
+        # 3. Organize results by practice type
+        for match in combined_matches:
+            if match['practice_type'] == 'bad':
+                relevant_rules['bad_practices'].append(match)
+            else:
+                relevant_rules['good_practices'].append(match)
+        
+        # 4. Determine the method used
+        if regex_matches and semantic_matches:
+            method = "Hybrid Match"
+        elif regex_matches:
+            method = "Regex Match"
+        elif semantic_matches:
+            method = "Vector Search"
+        else:
+            method = "No Matches"
+            
+        match_counts = {
+            'regex': len(regex_matches),
+            'semantic': len(semantic_matches),
+            'combined': len(combined_matches)
+        }
+        logger.info(f"Found {match_counts['regex']} regex matches and {match_counts['semantic']} semantic matches.")
+        logger.info(f"After combining and ranking: {match_counts['combined']} total matches.")
+        
+        return relevant_rules, method
 
     except psycopg2.Error as e:
-        print(f"Database error: {e}")
-        return relevant_rules
+        logger.error(f"Database error: {e}")
+        return {'good_practices': [], 'bad_practices': []}, "Error"
     except Exception as e:
-        print(f"An unexpected error occurred: {e}")
-        return relevant_rules
+        logger.error(f"An unexpected error occurred: {e}")
+        return {'good_practices': [], 'bad_practices': []}, "Error"
     finally:
-        if conn is not None:
+        if conn:
             conn.close()

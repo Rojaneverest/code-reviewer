@@ -9,7 +9,7 @@ sys.path.insert(0, project_root)
 from config import DB_CONFIG
 
 def setup_database():
-    """Sets up the PostgreSQL database, creating the vector_rules table and inserting initial data."""
+    """Sets up the PostgreSQL database, creating the rules table with the vector column and inserting initial data."""
     conn = None
     try:
         # Connect to the PostgreSQL server
@@ -17,21 +17,22 @@ def setup_database():
         conn = psycopg2.connect(**DB_CONFIG)
         cursor = conn.cursor()
 
-        # Create the vector_rules table
-        print('Dropping table "vector_rules" if it exists...')
-        cursor.execute("DROP TABLE IF EXISTS vector_rules;")
+        # Drop the rules table if it exists
+        print('Dropping table "rules" if it exists...')
+        cursor.execute("DROP TABLE IF EXISTS rules;")
 
-        print('Creating table "vector_rules"...')
+        # Create the rules table with the vector column
+        print('Creating table "rules"...')
         cursor.execute("""
         CREATE TABLE vector_rules (
             id SERIAL PRIMARY KEY,
             title VARCHAR(255) NOT NULL,
             description TEXT NOT NULL,
-            category VARCHAR(50) NOT NULL,
-            severity VARCHAR(50),
-            language VARCHAR(50) NOT NULL,
-            suggestion TEXT,
-            vector FLOAT[]
+            example_snippet TEXT,
+            practice_type TEXT NOT NULL DEFAULT 'bad',
+            last_updated_utc TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            vector FLOAT[],  -- Stores CodeT5 embeddings
+            UNIQUE (language, title)
         );
         """)
 
