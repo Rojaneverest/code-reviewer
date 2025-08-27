@@ -1,0 +1,32 @@
+# GitLab CI/CD configuration for SQL Code Review
+image: python:3.9
+
+variables:
+  PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
+
+cache:
+  paths:
+    - .cache/pip/
+    - venv/
+
+stages:
+  - sql-review
+
+sql_code_review:
+  stage: sql-review
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+  before_script:
+    - python -m venv venv
+    - source venv/bin/activate
+    - pip install --upgrade pip
+    - pip install -r requirements.txt
+    - git fetch origin $CI_MERGE_REQUEST_TARGET_BRANCH_NAME
+  script:
+    - python gitlab_ci_analyzer.py
+  artifacts:
+    reports:
+      junit: test-results.xml
+    when: always
+  only:
+    - merge_requests
