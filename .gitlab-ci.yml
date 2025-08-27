@@ -1,6 +1,10 @@
 # GitLab CI/CD configuration for SQL Code Review
 image: python:3.9
 
+stages:
+  - test
+  - sql-review
+
 variables:
   PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
 
@@ -9,24 +13,36 @@ cache:
     - .cache/pip/
     - venv/
 
-stages:
-  - sql-review
+before_script:
+  - apt-get update -qq && apt-get install -y -qq git curl
+  - python -m venv venv
+  - source venv/bin/activate
+  - pip install --upgrade pip
+  - pip install -r requirements.txt
 
-sql_code_review:
+# SQL Code Review Job - runs on merge requests
+sql-code-review:
   stage: sql-review
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
-  before_script:
-    - python -m venv venv
-    - source venv/bin/activate
-    - pip install --upgrade pip
-    - pip install -r requirements.txt
-    - git fetch origin $CI_MERGE_REQUEST_TARGET_BRANCH_NAME
   script:
+    - source venv/bin/activate
+    - echo "Analyzing SQL changes in merge request..."
     - python gitlab_ci_analyzer.py
   artifacts:
     reports:
       junit: test-results.xml
-    when: always
-  only:
-    - merge_requests
+    paths:
+      - review_results.json
+    expire_in: 1 week
+  allow_failure: true  # Don't block MR if analysis fails
+
+# Optional: Run tests on all commits
+test-python:
+  stage: test
+  script:
+    - source venv/bin/activate
+    - python -m pytest --version || echo "No pytest found, skipping tests"
+    - echo "Add your test commands here"
+  rules:
+    - if: $CI_COMMIT_BRANCH

@@ -1,239 +1,311 @@
-import os
-import subprocess
-import re
-import json
-import sqlparse
-from utils.line_mapper import map_sql_statements_to_lines
-from rag.retriever import find_relevant_rules
-from rag.generator import generate_review
-from utils.line_mapper import map_sql_statements_to_lines
+#!/usr/bin/env python3
 
-def get_changed_files(target_branch, source_branch):
-    """Get a list of changed .sql files between two branches."""
+import subprocess
+import os
+import sys
+import json
+import requests
+from typing import List, Dict, Tuple
+import sqlparse
+
+# Add the current directory to Python path
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+
+def get_gitlab_env_vars():
+    """Get required GitLab CI environment variables."""
+    required_vars = {
+        'CI_PROJECT_ID': os.environ.get('CI_PROJECT_ID'),
+        'CI_MERGE_REQUEST_IID': os.environ.get('CI_MERGE_REQUEST_IID'),
+        'CI_MERGE_REQUEST_TARGET_BRANCH_NAME': os.environ.get('CI_MERGE_REQUEST_TARGET_BRANCH_NAME', 'main'),
+        'CI_MERGE_REQUEST_SOURCE_BRANCH_NAME': os.environ.get('CI_MERGE_REQUEST_SOURCE_BRANCH_NAME'),
+        'GITLAB_API_TOKEN': os.environ.get('GITLAB_API_TOKEN'),
+        'CI_SERVER_URL': os.environ.get('CI_SERVER_URL', 'https://gitlab.com')
+    }
+    
+    missing_vars = [k for k, v in required_vars.items() if v is None]
+    if missing_vars:
+        print(f"Missing required environment variables: {missing_vars}")
+        return None
+    
+    return required_vars
+
+def get_changed_files(target_branch: str, source_branch: str) -> List[str]:
+    """Get list of changed .sql files between two branches."""
     try:
-        # Ensure the target branch is available for comparison
-        subprocess.run(['git', 'fetch', 'origin', target_branch], check=True, capture_output=True, text=True)
+        # Fetch the target branch to ensure we have the latest
+        subprocess.run(['git', 'fetch', 'origin', target_branch], check=True, capture_output=True)
         
-        # Get the diff
-        diff_process = subprocess.run(
-            ['git', 'diff', f"origin/{target_branch}...{source_branch}", '--name-only'],
-            check=True,
-            capture_output=True,
-            text=True
+        result = subprocess.run(
+            ['git', 'diff', '--name-only', f'origin/{target_branch}...HEAD'],
+            capture_output=True, text=True, check=True
         )
-        files = diff_process.stdout.strip().split('\n')
-        return [f for f in files if f.endswith('.sql') and os.path.exists(f)]
+        
+        all_files = result.stdout.strip().split('\n') if result.stdout.strip() else []
+        sql_files = [f for f in all_files if f.endswith('.sql') and f.strip()]
+        
+        print(f"Found {len(sql_files)} changed SQL files:")
+        for file in sql_files:
+            print(f"  - {file}")
+        
+        return sql_files
     except subprocess.CalledProcessError as e:
-        print(f"Error getting changed files: {e.stderr}")
+        print(f"Error getting changed files: {e}")
         return []
 
-def get_changed_lines(file_path, target_branch, source_branch):
-    """Get the line numbers of added/modified lines in the source branch version of the file."""
-    changed_lines = set()
+def get_changed_lines(file_path: str, target_branch: str, source_branch: str) -> List[int]:
+    """Get line numbers that were added or modified in the source branch."""
     try:
-        diff_process = subprocess.run(
-            ['git', 'diff', f"origin/{target_branch}...{source_branch}", '--', file_path],
-            check=True,
-            capture_output=True,
-            text=True
+        result = subprocess.run(
+            ['git', 'diff', f'origin/{target_branch}...HEAD', '--', file_path],
+            capture_output=True, text=True, check=True
         )
-        diff_output = diff_process.stdout
         
-        # Regex to find hunk headers, e.g., @@ -1,5 +1,6 @@
-        hunk_header_re = re.compile(r'^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@')
+        changed_lines = []
+        current_new_line = 0
         
-        current_line_in_new_file = 0
-        for line in diff_output.split('\n'):
-            match = hunk_header_re.match(line)
-            if match:
-                current_line_in_new_file = int(match.group(1))
-                continue
-            
-            if line.startswith('+') and not line.startswith('+++'):
-                changed_lines.add(current_line_in_new_file)
-                current_line_in_new_file += 1
-            elif not line.startswith('-'):
-                current_line_in_new_file += 1
-                
+        for line in result.stdout.split('\n'):
+            if line.startswith('@@'):
+                # Parse hunk header: @@ -old_start,old_count +new_start,new_count @@
+                parts = line.split()
+                if len(parts) >= 3:
+                    new_info = parts[2][1:]  # Remove the '+' prefix
+                    current_new_line = int(new_info.split(',')[0])
+            elif line.startswith('+') and not line.startswith('+++'):
+                # This is an added line
+                changed_lines.append(current_new_line)
+                current_new_line += 1
+            elif not line.startswith('-') and not line.startswith('\\'):
+                # This is a context line (unchanged)
+                current_new_line += 1
+        
+        print(f"Changed lines in {file_path}: {changed_lines}")
+        return changed_lines
+    
     except subprocess.CalledProcessError as e:
-        print(f"Error getting changed lines for {file_path}: {e.stderr}")
-    except Exception as e:
-        print(f"An unexpected error occurred while processing diff for {file_path}: {e}")
-        
-    return changed_lines
+        print(f"Error getting changed lines for {file_path}: {e}")
+        return []
 
-def map_lines_to_statements(file_path):
-    """Map each line number in the file to the SQL statement it belongs to."""
-    try:
-        with open(file_path, 'r') as f:
-            file_content = f.read()
-        
-        # Use our existing line mapper to get statements and their start lines
-        statements_with_lines = map_sql_statements_to_lines(file_content)
-        
-        # Create a mapping from line numbers to statements
-        line_to_statement = {}
-        
-        for statement, start_line in statements_with_lines:
-            statement_lines = statement.split('\n')
-            for i, line in enumerate(statement_lines):
-                line_number = start_line + i
-                line_to_statement[line_number] = {
-                    'statement': statement,
-                    'start_line': start_line
-                }
-        
-        return line_to_statement
-        
-    except Exception as e:
-        print(f"Error mapping lines to statements for {file_path}: {e}")
-        return {}
-
-def get_changed_statements(file_path, changed_lines):
-    """Get the unique SQL statements that contain the changed lines."""
-    line_to_statement = map_lines_to_statements(file_path)
-    changed_statements = {}
+def map_lines_to_statements(file_content: str, changed_lines: List[int]) -> List[Tuple[str, int, int]]:
+    """Map changed lines to complete SQL statements."""
+    if not changed_lines:
+        return []
     
-    for line_num in changed_lines:
-        if line_num in line_to_statement:
-            stmt_info = line_to_statement[line_num]
-            statement = stmt_info['statement']
-            start_line = stmt_info['start_line']
+    statements = sqlparse.split(file_content)
+    statement_mappings = []
+    current_line = 1
+    
+    for statement in statements:
+        if statement.strip():
+            statement_lines = statement.count('\n') + 1
+            start_line = current_line
+            end_line = current_line + statement_lines - 1
             
-            # Use the statement as key to ensure uniqueness
-            changed_statements[statement] = {
-                'statement': statement,
-                'start_line': start_line,
-                'file_path': file_path
-            }
+            # Check if any changed line falls within this statement
+            if any(start_line <= line <= end_line for line in changed_lines):
+                statement_mappings.append((statement.strip(), start_line, end_line))
+                print(f"Found changed statement (lines {start_line}-{end_line})")
+            
+            current_line = end_line + 1
     
-    return list(changed_statements.values())
+    return statement_mappings
 
-def analyze_statement(statement_info):
-    """Analyze a single SQL statement using our existing RAG system."""
-    statement = statement_info['statement']
-    start_line = statement_info['start_line']
-    file_path = statement_info['file_path']
+def analyze_sql_statements(statements_to_review: List[Tuple[str, int, int]]) -> Dict:
+    """Analyze SQL statements and return review results."""
+    print(f"\n=== Analyzing {len(statements_to_review)} SQL statements ===")
     
-    print(f"  Analyzing statement starting at line {start_line}...")
-    
-    # Find relevant rules for the statement
-    relevant_rules, log_method = find_relevant_rules(statement, language='SQL')
-    
-    # Generate review using our existing system
-    review = generate_review(statement, relevant_rules, log_method)
-    
-    if review and review.get('issues_found', 0) > 0:
-        # Adjust line numbers to be relative to the entire file
-        for issue in review['issues']:
-            relative_line = issue.get('line_number', 1)
-            issue['line_number'] = start_line + relative_line - 1
-            issue['file_path'] = file_path
-        
-        return review['issues']
-    
-    return []
-
-def main(target_branch, source_branch):
-    """Main function to analyze changed SQL files."""
-    changed_files = get_changed_files(target_branch, source_branch)
-    
-    if not changed_files:
-        print("No changed .sql files found.")
-        return
-
-    print(f"Found changed SQL files: {changed_files}")
-
     all_issues = []
-
-    for file_path in changed_files:
-        print(f"\nAnalyzing file: {file_path}")
-        
-        # Get the lines that were changed in this file
-        changed_lines = get_changed_lines(file_path, target_branch, source_branch)
-        
-        if not changed_lines:
-            print(f"  No changed lines found in {file_path}")
-            continue
-            
-        print(f"  Changed lines: {sorted(changed_lines)}")
-        
-        # Get the complete SQL statements that contain the changed lines
-        changed_statements = get_changed_statements(file_path, changed_lines)
-        
-        if not changed_statements:
-            print(f"  No SQL statements found for changed lines in {file_path}")
-            continue
-            
-        print(f"  Found {len(changed_statements)} statements to analyze")
-        
-        # Analyze each changed statement
-        for statement_info in changed_statements:
-            issues = analyze_statement(statement_info)
-            all_issues.extend(issues)
-
-    # Format results for GitLab comment
-    if all_issues:
-        print(f"\n--- Analysis Complete: Found {len(all_issues)} total issues ---")
-        format_issues_for_gitlab(all_issues)
-    else:
-        print("\n--- Analysis Complete: No issues found ---")
-
-def format_issues_for_gitlab(issues):
-    """Format the issues as a GitLab-friendly markdown comment."""
-    comment = "## 🔍 SQL Code Review Results\n\n"
     
-    if not issues:
-        comment += "✅ No issues found in the changed SQL code.\n"
-        return comment
+    for statement, start_line, end_line in statements_to_review:
+        print(f"\nAnalyzing statement at lines {start_line}-{end_line}")
+        
+        try:
+            # Import and use our existing analysis logic
+            from main import analyze_code_chunk
+            
+            # Analyze this specific statement
+            issues = analyze_code_chunk(statement, language='SQL')
+            
+            # Add line number context and adjust line numbers
+            for issue in issues:
+                # Adjust the line number to be relative to the file, not the chunk
+                original_line = issue.get('line_number', 1)
+                adjusted_line = start_line + original_line - 1
+                issue['line_number'] = adjusted_line
+                issue['file_line_range'] = f"{start_line}-{end_line}"
+                all_issues.append(issue)
+                
+        except Exception as e:
+            print(f"Error analyzing statement: {e}")
+            # Create a fallback issue
+            all_issues.append({
+                'line_number': start_line,
+                'severity': 'Error',
+                'suggestion': f'Failed to analyze this SQL statement: {str(e)}',
+                'file_line_range': f"{start_line}-{end_line}"
+            })
     
-    comment += f"Found **{len(issues)}** issue(s) in the changed SQL code:\n\n"
+    return {
+        'total_issues': len(all_issues),
+        'issues': all_issues
+    }
+
+def format_gitlab_comment(results: Dict, changed_files: List[str]) -> str:
+    """Format results as a GitLab merge request comment."""
+    if results['total_issues'] == 0:
+        return """## 🎉 SQL Code Review - No Issues Found!
+
+Your SQL changes look good! No code quality issues were detected.
+
+*Automated review by SQL Code Reviewer*"""
+    
+    comment = f"""## 🔍 SQL Code Review Results
+
+Found **{results['total_issues']} issues** in {len(changed_files)} changed SQL file(s):
+
+"""
     
     # Group issues by file
     issues_by_file = {}
-    for issue in issues:
-        file_path = issue.get('file_path', 'Unknown')
-        if file_path not in issues_by_file:
-            issues_by_file[file_path] = []
-        issues_by_file[file_path].append(issue)
+    for issue in results['issues']:
+        file_name = "Unknown file"  # We'll enhance this later to track file names
+        if file_name not in issues_by_file:
+            issues_by_file[file_name] = []
+        issues_by_file[file_name].append(issue)
     
-    for file_path, file_issues in issues_by_file.items():
-        comment += f"### 📄 `{file_path}`\n\n"
+    # Format issues
+    for i, issue in enumerate(results['issues'], 1):
+        severity_emoji = {
+            'Critical': '🚨',
+            'Major': '⚠️',
+            'Minor': '💡',
+            'AI Generated Suggestion': '🤖'
+        }.get(issue.get('severity', 'Unknown'), '❓')
         
-        for issue in file_issues:
-            severity = issue.get('severity', 'Unknown')
-            line_num = issue.get('line_number', 'Unknown')
-            suggestion = issue.get('suggestion', 'No suggestion provided')
-            rule_id = issue.get('rule_id', '')
-            
-            # Choose emoji based on severity
-            if severity == 'Critical':
-                emoji = '🔴'
-            elif severity == 'Major':
-                emoji = '🟠'
-            elif severity == 'Minor':
-                emoji = '🟡'
-            else:
-                emoji = '💡'
-            
-            comment += f"{emoji} **Line {line_num}** - {severity}"
-            if rule_id:
-                comment += f" (Rule {rule_id})"
-            comment += f"\n> {suggestion}\n\n"
+        comment += f"""### {severity_emoji} Issue #{i} - {issue.get('severity', 'Unknown')}
+
+**Line {issue.get('line_number', 'Unknown')}** ({issue.get('file_line_range', 'Unknown range')})
+
+{issue.get('suggestion', 'No suggestion provided')}
+
+---
+
+"""
     
-    comment += "---\n*This comment was generated automatically by the SQL Code Review bot.*"
-    
-    print("\n--- GitLab Comment ---")
-    print(comment)
-    print("--- End Comment ---")
-    
+    comment += "\n*🤖 Automated review by SQL Code Reviewer*"
     return comment
 
-
-if __name__ == '__main__':
-    # These would be provided by the GitLab CI/CD environment
-    # Example: CI_MERGE_REQUEST_TARGET_BRANCH_NAME and CI_COMMIT_BRANCH
-    target = os.environ.get("CI_MERGE_REQUEST_TARGET_BRANCH_NAME", "main")
-    source = os.environ.get("CI_COMMIT_BRANCH", "v1-CICD-CR")
+def post_review_to_gitlab(comment: str, env_vars: Dict) -> bool:
+    """Post the review comment to GitLab merge request."""
+    url = f"{env_vars['CI_SERVER_URL']}/api/v4/projects/{env_vars['CI_PROJECT_ID']}/merge_requests/{env_vars['CI_MERGE_REQUEST_IID']}/notes"
     
-    main(target, source)
+    headers = {
+        'Authorization': f"Bearer {env_vars['GITLAB_API_TOKEN']}",
+        'Content-Type': 'application/json'
+    }
+    
+    data = {
+        'body': comment
+    }
+    
+    try:
+        response = requests.post(url, headers=headers, json=data)
+        if response.status_code == 201:
+            print("✅ Successfully posted review comment to GitLab MR")
+            return True
+        else:
+            print(f"❌ Failed to post comment. Status: {response.status_code}")
+            print(f"Response: {response.text}")
+            return False
+    except Exception as e:
+        print(f"❌ Error posting to GitLab: {e}")
+        return False
+
+def main():
+    """Main function for GitLab CI execution."""
+    print("🚀 Starting SQL Code Review for GitLab MR")
+    print("=" * 60)
+    
+    # Get GitLab environment variables
+    env_vars = get_gitlab_env_vars()
+    if not env_vars:
+        print("❌ Missing required GitLab CI environment variables")
+        sys.exit(1)
+    
+    target_branch = env_vars['CI_MERGE_REQUEST_TARGET_BRANCH_NAME']
+    source_branch = env_vars['CI_MERGE_REQUEST_SOURCE_BRANCH_NAME']
+    
+    print(f"🔍 Analyzing changes from {source_branch} → {target_branch}")
+    print(f"📋 Merge Request IID: {env_vars['CI_MERGE_REQUEST_IID']}")
+    
+    # Get changed SQL files
+    changed_files = get_changed_files(target_branch, source_branch)
+    
+    if not changed_files:
+        comment = """## 🔍 SQL Code Review
+
+No SQL files were changed in this merge request.
+
+*🤖 Automated review by SQL Code Reviewer*"""
+        
+        post_review_to_gitlab(comment, env_vars)
+        print("✅ No SQL files to review")
+        return
+    
+    all_results = {'total_issues': 0, 'issues': []}
+    
+    # Process each changed file
+    for file_path in changed_files:
+        print(f"\n📄 Processing file: {file_path}")
+        print("-" * 40)
+        
+        # Get changed lines
+        changed_lines = get_changed_lines(file_path, target_branch, source_branch)
+        
+        if not changed_lines:
+            print(f"No line changes detected in {file_path}")
+            continue
+        
+        # Read file content
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                file_content = f.read()
+        except Exception as e:
+            print(f"Error reading {file_path}: {e}")
+            continue
+        
+        # Map to statements
+        statements_to_review = map_lines_to_statements(file_content, changed_lines)
+        
+        if not statements_to_review:
+            print(f"No complete SQL statements found for changed lines in {file_path}")
+            continue
+        
+        # Analyze statements
+        file_results = analyze_sql_statements(statements_to_review)
+        
+        # Accumulate results
+        all_results['total_issues'] += file_results['total_issues']
+        all_results['issues'].extend(file_results['issues'])
+    
+    # Format and post results
+    print("\n" + "=" * 60)
+    print("📋 POSTING RESULTS TO GITLAB MR")
+    print("=" * 60)
+    
+    comment = format_gitlab_comment(all_results, changed_files)
+    success = post_review_to_gitlab(comment, env_vars)
+    
+    # Save results as artifacts
+    with open('review_results.json', 'w') as f:
+        json.dump(all_results, f, indent=2)
+    
+    print(f"\n📊 Summary: {all_results['total_issues']} issues found in {len(changed_files)} files")
+    
+    if success:
+        print("✅ Review completed successfully!")
+    else:
+        print("⚠️  Review completed but failed to post comment")
+        sys.exit(1)
+
+if __name__ == "__main__":
+    main()
