@@ -78,7 +78,8 @@ def analyze_code(file_path):
         # Find relevant rules for the current chunk using the hybrid retriever
         relevant_rules, log_method = find_relevant_rules(code_chunk, language=language)
 
-        print(f"\nProcessing chunk (lines {start_line}-{start_line + code_chunk.count('\n')}) with: {log_method}")
+        newline_count = code_chunk.count('\n')
+        print(f"\nProcessing chunk (lines {start_line}-{start_line + newline_count}) with: {log_method}")
 
         # Generate a review for the chunk
         review = generate_review(code_chunk, relevant_rules, log_method)
