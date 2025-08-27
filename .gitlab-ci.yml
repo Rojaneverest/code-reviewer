@@ -2,6 +2,7 @@
 image: python:3.9
 
 stages:
+  - precheck
   - test
   - sql-review
 
@@ -13,36 +14,44 @@ cache:
     - .cache/pip/
     - venv/
 
-before_script:
-  - apt-get update -qq && apt-get install -y -qq git curl
-  - python -m venv venv
-  - source venv/bin/activate
-  - pip install --upgrade pip
-  - pip install -r requirements.txt
-
-# SQL Code Review Job - runs on merge requests
-sql-code-review:
-  stage: sql-review
+# Pre-check job: validates GitLab CI environment variables
+precheck-gitlab-env:
+  stage: precheck
+  image: python:3.9
+  script:
+    - echo "🔍 Validating GitLab CI/CD environment..."
+    - python gitlab_env_check.py
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+
+# SQL Code Review Job - runs only if precheck passes
+sql-code-review:
+  stage: sql-review
+  image: python:3.9
+  needs: [precheck-gitlab-env]
+  before_script:
+    - python -m venv venv
+    - source venv/bin/activate
+    - pip install --upgrade pip
+    - pip install -r requirements.txt
   script:
     - source venv/bin/activate
     - echo "Analyzing SQL changes in merge request..."
     - python gitlab_ci_analyzer.py
   artifacts:
-    reports:
-      junit: test-results.xml
     paths:
       - review_results.json
     expire_in: 1 week
-  allow_failure: true  # Don't block MR if analysis fails
-
-# Optional: Run tests on all commits
-test-python:
-  stage: test
-  script:
-    - source venv/bin/activate
-    - python -m pytest --version || echo "No pytest found, skipping tests"
-    - echo "Add your test commands here"
+  allow_failure: true
   rules:
-    - if: $CI_COMMIT_BRANCH
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+
+# Optional: Local environment test (runs on regular commits)
+test-local-env:
+  stage: test
+  image: python:3.9
+  script:
+    - pip install python-dotenv
+    - python test_env_vars.py
+  rules:
+    - if: $CI_COMMIT_BRANCH && $CI_PIPELINE_SOURCE != "merge_request_event"

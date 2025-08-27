@@ -26,31 +26,31 @@ def test_environment_variables():
             'required': True,
             'sensitive': True
         },
-        'DB_HOST': {
+        'host': {
             'description': 'PostgreSQL database host',
             'required': True,
             'sensitive': False,
             'fallback': 'localhost'
         },
-        'DB_NAME': {
+        'dbname': {
             'description': 'PostgreSQL database name',
             'required': True,
             'sensitive': False,
             'fallback': 'rules'
         },
-        'DB_USER': {
+        'user': {
             'description': 'PostgreSQL database user',
             'required': True,
             'sensitive': False,
             'fallback': 'postgres'
         },
-        'DB_PASSWORD': {
+        'password': {
             'description': 'PostgreSQL database password',
             'required': True,
             'sensitive': True,
             'fallback': 'root'
         },
-        'DB_PORT': {
+        'port': {
             'description': 'PostgreSQL database port',
             'required': False,
             'sensitive': False,
