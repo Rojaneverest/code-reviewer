@@ -1,9 +1,5 @@
 torch
 transformers
-datasets
 psycopg2-binary
 sqlparse
-openai
-sentence-transformers
 dotenv
-llama-cpp-python
