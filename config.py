@@ -1,10 +1,13 @@
+import os
+
 # PostgreSQL Database Configuration
+# Uses environment variables with fallbacks for local development
 DB_CONFIG = {
-    "dbname": "rules",
-    "user": "postgres",
-    "password": "root",
-    "host": "localhost",
-    "port": "5432"
+    "dbname": os.getenv("dbname", "rules"),
+    "user": os.getenv("user", "postgres"),
+    "password": os.getenv("password", "root"),
+    "host": os.getenv("host", "localhost"),  # Will be 'postgres' in GitLab CI
+    "port": os.getenv("port", "5432")
 }
 
 # LM Studio API Configuration
