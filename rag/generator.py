@@ -154,6 +154,11 @@ def generate_review(code_chunk, rules, retrieval_method="Vector Search"):
   * Any context where the columns are already well-defined in an inner query
 - ONLY flag "SELECT *" when it's used directly against base tables without column specification in application queries
 
+**CRITICAL - SUGGESTION FORMATTING:**
+- In your `suggestion` text, DO NOT mention specific line numbers (like "line 5", "lines 2-3", etc.)
+- Instead, refer to code elements by their content (e.g., "the COALESCE expression", "the WHERE clause", "the JOIN operation")
+- Focus on describing WHAT the issue is and HOW to fix it, not WHERE it appears
+
 **Task:**
 1.  **Analyze the code comprehensively using your knowledge.** Look for common SQL anti-patterns, performance issues, security vulnerabilities, and maintainability concerns.
 2.  **Focus on practical, actionable feedback.** Prioritize issues that could impact performance, security, or code maintainability.
@@ -200,6 +205,11 @@ JSON Response:"""
   * Any context where the columns are already well-defined in an inner query
 - ONLY flag "SELECT *" when it's used directly against base tables without column specification in application queries
 
+**CRITICAL - SUGGESTION FORMATTING:**
+- In your `suggestion` text, DO NOT mention specific line numbers (like "line 5", "lines 2-3", etc.)
+- Instead, refer to code elements by their content (e.g., "the COALESCE expression", "the WHERE clause", "the JOIN operation")
+- Focus on describing WHAT the issue is and HOW to fix it, not WHERE it appears
+
 **Task:**
 1.  Your task is to review the code and confirm each violation from the list of 'Bad Practices Found by Regex'.
 2.  Your response MUST be a single, valid JSON object. The JSON should contain a list of all confirmed issues.
@@ -232,6 +242,11 @@ JSON Response:"""
   * Any context where the columns are already well-defined in an inner query
 - ONLY flag "SELECT *" when it's used directly against base tables without column specification in application queries
 
+**CRITICAL - SUGGESTION FORMATTING:**
+- In your `suggestion` text, DO NOT mention specific line numbers (like "line 5", "lines 2-3", etc.)
+- Instead, refer to code elements by their content (e.g., "the COALESCE expression", "the WHERE clause", "the JOIN operation")
+- Focus on describing WHAT the issue is and HOW to fix it, not WHERE it appears
+
 **Task:**
 1.  **Critically evaluate** the 'Code to Review' against each of the 'Potential Bad Practices'.
 2.  If you find a genuine violation, create a JSON object with the issue details. **Provide concise, actionable suggestions.**
@@ -258,6 +273,11 @@ JSON Response:"""
   * Data pipeline operations, ETL processes, or data movement between tables
   * Any context where the columns are already well-defined in an inner query
 - ONLY flag "SELECT *" when it's used directly against base tables without column specification in application queries
+
+**CRITICAL - SUGGESTION FORMATTING:**
+- In your `suggestion` text, DO NOT mention specific line numbers (like "line 5", "lines 2-3", etc.)
+- Instead, refer to code elements by their content (e.g., "the COALESCE expression", "the WHERE clause", "the JOIN operation")
+- Focus on describing WHAT the issue is and HOW to fix it, not WHERE it appears
 
 **Task:**
 1.  **Analyze the code creatively and critically.** Look for anti-patterns, performance bottlenecks (like correlated subqueries), or security risks that may not be in a standard rulebook.
