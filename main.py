@@ -2,11 +2,15 @@ import argparse
 import os
 import json
 import re
+from dotenv import load_dotenv
 from rag.retriever import find_relevant_rules
 from rag.generator import generate_review
 from utils.line_mapper import map_sql_statements_to_lines
 from utils.chunker import chunk_pyspark_file
 from datetime import datetime
+
+# Load environment variables from .env file
+load_dotenv()
 
 
 def analyze_code_chunk(code_chunk, language='SQL'):

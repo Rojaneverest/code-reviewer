@@ -1,5 +1,8 @@
 import os
+from dotenv import load_dotenv
 
+# Load environment variables from .env file
+load_dotenv()
 # PostgreSQL Database Configuration
 # Uses local PostgreSQL database since runner runs locally
 DB_CONFIG = {
