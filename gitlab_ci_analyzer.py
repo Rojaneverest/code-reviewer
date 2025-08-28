@@ -120,32 +120,64 @@ def get_changed_lines(file_path: str, target_branch: str, source_branch: str) ->
         return []
 
 def map_lines_to_statements(file_content: str, changed_lines: List[int]) -> List[Tuple[str, int, int]]:
-    """Map changed lines to complete SQL statements."""
+    """
+    Map changed lines to complete SQL statements using the accurate line mapper.
+    Returns list of (statement, start_line, end_line) tuples.
+    """
     if not changed_lines:
         return []
     
-    statements = sqlparse.split(file_content)
-    statement_mappings = []
-    current_line = 1
+    print(f"Mapping {len(changed_lines)} changed lines to SQL statements...")
     
-    for statement in statements:
-        if statement.strip():
-            statement_lines = statement.count('\n') + 1
-            start_line = current_line
-            end_line = current_line + statement_lines - 1
+    try:
+        # Use the existing line mapper utility for accurate mapping
+        from utils.line_mapper import map_sql_statements_to_lines
+        
+        # Get statement mappings using the accurate line mapper
+        statement_chunks = map_sql_statements_to_lines(file_content)
+        
+        statements_to_review = []
+        
+        for statement, start_line in statement_chunks:
+            # Calculate end line based on statement content
+            statement_line_count = statement.count('\n')
+            end_line = start_line + statement_line_count
             
             # Check if any changed line falls within this statement
             if any(start_line <= line <= end_line for line in changed_lines):
-                statement_mappings.append((statement.strip(), start_line, end_line))
-                print(f"Found changed statement (lines {start_line}-{end_line})")
-            
-            current_line = end_line + 1
-    
-    return statement_mappings
+                statements_to_review.append((statement, start_line, end_line))
+                print(f"Found changed statement (lines {start_line}-{end_line}): {statement[:50]}...")
+        
+        print(f"Total statements to review: {len(statements_to_review)}")
+        return statements_to_review
+        
+    except Exception as e:
+        print(f"Error using line mapper: {e}")
+        print("Falling back to simple statement splitting...")
+        
+        # Fallback to simple approach if line mapper fails
+        statements = sqlparse.split(file_content)
+        statement_mappings = []
+        current_line = 1
+        
+        for statement in statements:
+            if statement.strip():
+                statement_lines = statement.count('\n') + 1
+                start_line = current_line
+                end_line = current_line + statement_lines - 1
+                
+                # Check if any changed line falls within this statement
+                if any(start_line <= line <= end_line for line in changed_lines):
+                    statement_mappings.append((statement.strip(), start_line, end_line))
+                    print(f"Found changed statement (lines {start_line}-{end_line})")
+                
+                current_line = end_line + 1
+        
+        return statement_mappings
 
-def analyze_sql_statements(statements_to_review: List[Tuple[str, int, int]]) -> Dict:
-    """Analyze SQL statements and return review results."""
-    print(f"\n=== Analyzing {len(statements_to_review)} SQL statements ===")
+def analyze_sql_statements(statements_to_review: List[Tuple[str, int, int]], file_path: str) -> Dict:
+    """Analyze SQL statements and return review results with proper file tracking."""
+    print(f"\n=== Analyzing {len(statements_to_review)} SQL statements in {file_path} ===")
     
     all_issues = []
     
@@ -153,19 +185,32 @@ def analyze_sql_statements(statements_to_review: List[Tuple[str, int, int]]) -> 
         print(f"\nAnalyzing statement at lines {start_line}-{end_line}")
         
         try:
-            # Import and use our existing analysis logic
+            # Import required modules for analysis
             from main import analyze_code_chunk
             
             # Analyze this specific statement
             issues = analyze_code_chunk(statement, language='SQL')
             
-            # Add line number context and adjust line numbers
+            # Add proper file and line information to each issue
             for issue in issues:
-                # Adjust the line number to be relative to the file, not the chunk
-                original_line = issue.get('line_number', 1)
-                adjusted_line = start_line + original_line - 1
+                # The analyze_code_chunk returns line numbers relative to the chunk
+                # We need to adjust them to be relative to the original file
+                relative_line = issue.get('line_number', 1)
+                
+                # Adjust line number: start_line is 1-based, relative_line is 1-based
+                # So we add them and subtract 1 to avoid double-counting
+                adjusted_line = start_line + relative_line - 1
+                
+                # Ensure line number is within the statement bounds
+                if adjusted_line > end_line:
+                    adjusted_line = end_line
+                
                 issue['line_number'] = adjusted_line
                 issue['file_line_range'] = f"{start_line}-{end_line}"
+                issue['file_path'] = file_path
+                issue['statement_start_line'] = start_line
+                issue['statement_end_line'] = end_line
+                
                 all_issues.append(issue)
                 
         except Exception as e:
@@ -175,7 +220,10 @@ def analyze_sql_statements(statements_to_review: List[Tuple[str, int, int]]) -> 
                 'line_number': start_line,
                 'severity': 'Error',
                 'suggestion': f'Failed to analyze this SQL statement: {str(e)}',
-                'file_line_range': f"{start_line}-{end_line}"
+                'file_line_range': f"{start_line}-{end_line}",
+                'file_path': file_path,
+                'statement_start_line': start_line,
+                'statement_end_line': end_line
             })
     
     return {
@@ -184,7 +232,7 @@ def analyze_sql_statements(statements_to_review: List[Tuple[str, int, int]]) -> 
     }
 
 def format_gitlab_comment(results: Dict, changed_files: List[str]) -> str:
-    """Format results as a GitLab merge request comment."""
+    """Format results as a GitLab merge request comment with proper file grouping."""
     
     # Check if any issues were generated using AI fallback
     ai_fallback_used = any(
@@ -226,31 +274,75 @@ Found **{results['total_issues']} issues** in {len(changed_files)} changed SQL f
     # Group issues by file
     issues_by_file = {}
     for issue in results['issues']:
-        file_name = "Unknown file"  # We'll enhance this later to track file names
-        if file_name not in issues_by_file:
-            issues_by_file[file_name] = []
-        issues_by_file[file_name].append(issue)
+        file_path = issue.get('file_path', 'Unknown file')
+        if file_path not in issues_by_file:
+            issues_by_file[file_path] = []
+        issues_by_file[file_path].append(issue)
     
-    # Format issues
-    for i, issue in enumerate(results['issues'], 1):
-        severity_emoji = {
-            'Critical': '🚨',
-            'Major': '⚠️',
-            'Minor': '💡',
-            'AI Generated Suggestion': '🤖'
-        }.get(issue.get('severity', 'Unknown'), '❓')
+    # Format issues grouped by file
+    for file_path, file_issues in issues_by_file.items():
+        # Get just the filename for cleaner display
+        file_display_name = os.path.basename(file_path) if file_path != 'Unknown file' else file_path
         
-        comment += f"""### {severity_emoji} Issue #{i} - {issue.get('severity', 'Unknown')}
-
-**Line {issue.get('line_number', 'Unknown')}** ({issue.get('file_line_range', 'Unknown range')})
-
-{issue.get('suggestion', 'No suggestion provided')}
-
----
+        comment += f"""### 📁 {file_display_name}
+**Full Path**: `{file_path}`
+**Issues Found**: {len(file_issues)}
 
 """
+        
+        for i, issue in enumerate(file_issues, 1):
+            severity_emoji = {
+                'Critical': '🚨',
+                'Major': '⚠️', 
+                'Minor': '💡',
+                'AI Generated Suggestion': '🤖',
+                'Error': '❌'
+            }.get(issue.get('severity', 'Unknown'), '❓')
+            
+            # Create detailed line information
+            line_info = f"**Line {issue.get('line_number', 'Unknown')}**"
+            if issue.get('file_line_range'):
+                line_info += f" (Statement: lines {issue.get('file_line_range')})"
+            
+            # Get rule ID if available
+            rule_info = ""
+            if issue.get('rule_id'):
+                rule_info = f" | Rule ID: {issue.get('rule_id')}"
+            
+            comment += f"""**{i}.** {severity_emoji} {line_info} - **{issue.get('severity', 'Unknown')}**{rule_info}
+   
+   {issue.get('suggestion', 'No suggestion provided')}
+
+"""
+        
+        comment += "\n"
     
-    comment += "\n*🤖 Automated review by SQL Code Reviewer*"
+    # Add summary section
+    total_files = len(issues_by_file)
+    severity_counts = {}
+    for issue in results['issues']:
+        severity = issue.get('severity', 'Unknown')
+        severity_counts[severity] = severity_counts.get(severity, 0) + 1
+    
+    comment += f"""---
+
+## 📊 Review Summary
+- **Files Analyzed**: {total_files}
+- **Total Issues**: {results['total_issues']}"""
+    
+    if severity_counts:
+        comment += "\n- **Severity Breakdown**:"
+        for severity, count in sorted(severity_counts.items()):
+            emoji = {
+                'Critical': '🚨',
+                'Major': '⚠️',
+                'Minor': '💡', 
+                'AI Generated Suggestion': '🤖',
+                'Error': '❌'
+            }.get(severity, '❓')
+            comment += f"\n  - {emoji} {severity}: {count}"
+
+    comment += "\n\n*🤖 AI Code Reviewer by Rojan Raj Thapa*"
     return comment
 
 def post_review_to_gitlab(comment: str, env_vars: Dict) -> bool:
@@ -361,7 +453,7 @@ No SQL files were changed in this merge request.
             continue
         
         # Analyze statements
-        file_results = analyze_sql_statements(statements_to_review)
+        file_results = analyze_sql_statements(statements_to_review, file_path)
         
         # Accumulate results
         all_results['total_issues'] += file_results['total_issues']
