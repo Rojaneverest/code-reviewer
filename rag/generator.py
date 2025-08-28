@@ -172,9 +172,10 @@ JSON Response:"""
 
 **Task:**
 1.  Your task is to review the code and confirm each violation from the list of 'Bad Practices Found by Regex'.
-2.  Your response MUST be a single, valid JSON object. The JSON should contain a list of all confirmed issues.
-3.  For each issue, provide **only** these four keys: `line_number` (relative to the chunk), `severity`, `rule_id`, and `suggestion`. **Do not add any other keys.**
-4.  If you cannot confirm any of the violations, you MUST return this exact JSON object: `{{"issues_found": 0, "issues": []}}`
+2.  Only include "select * from" bad practice as a review if it is not being used to load/unload data from or to a table or data repository. 
+3.  Your response MUST be a single, valid JSON object. The JSON should contain a list of all confirmed issues.
+4.  For each issue, provide **only** these four keys: `line_number` (relative to the chunk), `severity`, `rule_id`, and `suggestion`. **Do not add any other keys.**
+5.  If you cannot confirm any of the violations, you MUST return this exact JSON object: `{{"issues_found": 0, "issues": []}}`
 
 JSON Response:"""
     else:  # Vector Search, Hybrid Match, No Matches
@@ -194,10 +195,11 @@ JSON Response:"""
 
 **Task:**
 1.  **Critically evaluate** the 'Code to Review' against each of the 'Potential Bad Practices'.
-2.  If you find a genuine violation, create a JSON object with the issue details. **Provide concise, actionable suggestions.**
-3.  **Crucially, if the code does NOT violate any of the listed bad practices, you MUST return an empty list of issues.**
-4.  Your response MUST be a single, valid JSON object. If no violations are found, return this exact JSON object: `{{"issues_found": 0, "issues": []}}`
-5.  Each issue object MUST contain **only** these four keys: `line_number` (relative to the chunk), `severity`, `rule_id`, and `suggestion`. **Do not add any other keys.**
+2.  Only include "select * from" bad practice as a review if it is not being used to load/unload data from or to a table or data repository.
+3.  If you find a genuine violation, create a JSON object with the issue details. **Provide concise, actionable suggestions.**
+4.  **Crucially, if the code does NOT violate any of the listed bad practices, you MUST return an empty list of issues.**
+5.  Your response MUST be a single, valid JSON object. If no violations are found, return this exact JSON object: `{{"issues_found": 0, "issues": []}}`
+6.  Each issue object MUST contain **only** these four keys: `line_number` (relative to the chunk), `severity`, `rule_id`, and `suggestion`. **Do not add any other keys.**
 
 JSON Response:"""
         else:
@@ -211,10 +213,11 @@ JSON Response:"""
 
 **Task:**
 1.  **Analyze the code creatively and critically.** Look for anti-patterns, performance bottlenecks (like correlated subqueries), or security risks that may not be in a standard rulebook.
-2.  **Be concise and group related feedback.** If multiple suggestions apply to the same issue, combine them into a single, comprehensive suggestion. Aim to provide a maximum of three distinct, high-impact suggestions for the code chunk.
-3.  If you identify any issues, create a JSON object describing them. Your response MUST be a single, valid JSON object.
-4.  For each issue, provide **only** these three keys: `line_number` (relative to the chunk), `severity` (use "AI Generated Suggestion"), and `suggestion`. **Do not include a `rule_id` or any other keys.**
-5.  If you find no issues, you MUST return this exact JSON object: `{{"issues_found": 0, "issues": []}}`
+2.  Only include "select * from" bad practice as a review if it is not being used to load/unload data from or to a table or data repository.
+3.  **Be concise and group related feedback.** If multiple suggestions apply to the same issue, combine them into a single, comprehensive suggestion. Aim to provide a maximum of three distinct, high-impact suggestions for the code chunk.
+4.  If you identify any issues, create a JSON object describing them. Your response MUST be a single, valid JSON object.
+5.  For each issue, provide **only** these three keys: `line_number` (relative to the chunk), `severity` (use "AI Generated Suggestion"), and `suggestion`. **Do not include a `rule_id` or any other keys.**
+6.  If you find no issues, you MUST return this exact JSON object: `{{"issues_found": 0, "issues": []}}`
 
 **Example of a valid response:**
 ```json
