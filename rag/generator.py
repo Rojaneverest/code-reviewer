@@ -2,21 +2,40 @@ import requests
 import json
 from dotenv import load_dotenv
 import os
+import sys
+
+# Add the parent directory to the path to import config
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from config import LLM_CONFIG
 
 load_dotenv()
 
-DATABRICKS_TOKEN = os.environ.get('DATABRICKS_TOKEN')
-if DATABRICKS_TOKEN is None:
-    raise ValueError("DATABRICKS_TOKEN environment variable is not set.")
-
 def call_databricks_llm(prompt, temperature=0.0):
+    """
+    Call Databricks LLM endpoint with flexible configuration.
+    Falls back to LM Studio if Databricks is not configured.
+    """
+    databricks_config = LLM_CONFIG["databricks"]
+    
+    # Check if Databricks is configured and enabled
+    if not databricks_config["enabled"] or not databricks_config["token"]:
+        print("Databricks not configured, attempting fallback to LM Studio...")
+        return call_lm_studio_fallback(prompt, temperature)
+    
     headers = {
-        "Authorization": f"Bearer {DATABRICKS_TOKEN}",
+        "Authorization": f"Bearer {databricks_config['token']}",
         "Content-Type": "application/json"
     }
     
-    endpoint_name = "databricks-claude-sonnet-4"
-    url = f"https://dbc-3735add4-1cb6.cloud.databricks.com/serving-endpoints/{endpoint_name}/invocations"
+    # Build the URL from configuration
+    base_url = databricks_config["base_url"]
+    endpoint_path = databricks_config.get("endpoint", "/serving-endpoints/databricks-claude-sonnet-4/invocations")
+    
+    # Handle both full URLs and base URLs
+    if endpoint_path.startswith("http"):
+        url = endpoint_path
+    else:
+        url = f"{base_url.rstrip('/')}{endpoint_path}"
     
     data = {
         "messages": [
@@ -26,7 +45,7 @@ def call_databricks_llm(prompt, temperature=0.0):
     }
     
     try:
-        response = requests.post(url, headers=headers, data=json.dumps(data))
+        response = requests.post(url, headers=headers, data=json.dumps(data), timeout=60)
         if response.status_code == 200:
             result = response.json()
             # Extract the text content from the response
@@ -42,10 +61,49 @@ def call_databricks_llm(prompt, temperature=0.0):
                     return message["content"]
             return None
         else:
-            print(f"Error: {response.status_code} - {response.text}")
-            return None
+            print(f"Databricks LLM Error: {response.status_code} - {response.text}")
+            print("Attempting fallback to LM Studio...")
+            return call_lm_studio_fallback(prompt, temperature)
     except Exception as e:
         print(f"Error connecting to Databricks LLM: {e}")
+        print("Attempting fallback to LM Studio...")
+        return call_lm_studio_fallback(prompt, temperature)
+
+def call_lm_studio_fallback(prompt, temperature=0.0):
+    """
+    Fallback to LM Studio when Databricks is unavailable.
+    """
+    lm_studio_config = LLM_CONFIG["lm_studio"]
+    
+    if not lm_studio_config["enabled"]:
+        print("Both Databricks and LM Studio are unavailable. Please configure at least one LLM endpoint.")
+        return None
+    
+    try:
+        import openai
+        
+        # Configure OpenAI client for LM Studio
+        client = openai.OpenAI(
+            base_url=lm_studio_config["api_base"],
+            api_key=lm_studio_config["api_key"]
+        )
+        
+        response = client.chat.completions.create(
+            model="local-model",  # LM Studio uses this as placeholder
+            messages=[
+                {"role": "user", "content": prompt}
+            ],
+            temperature=temperature,
+            timeout=60
+        )
+        
+        return response.choices[0].message.content
+        
+    except ImportError:
+        print("OpenAI library not installed. Install with: pip install openai")
+        return None
+    except Exception as e:
+        print(f"Error connecting to LM Studio: {e}")
         return None
 
 def generate_review(code_chunk, rules, retrieval_method="Vector Search"):
