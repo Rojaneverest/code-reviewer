@@ -2,21 +2,40 @@ import requests
 import json
 from dotenv import load_dotenv
 import os
+import sys
+
+# Add the parent directory to the path to import config
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from config import LLM_CONFIG
 
 load_dotenv()
 
-DATABRICKS_TOKEN = os.environ.get('DATABRICKS_TOKEN')
-if DATABRICKS_TOKEN is None:
-    raise ValueError("DATABRICKS_TOKEN environment variable is not set.")
-
 def call_databricks_llm(prompt, temperature=0.0):
+    """
+    Call Databricks LLM endpoint with flexible configuration.
+    Falls back to LM Studio if Databricks is not configured.
+    """
+    databricks_config = LLM_CONFIG["databricks"]
+    
+    # Check if Databricks is configured and enabled
+    if not databricks_config["enabled"] or not databricks_config["token"]:
+        print("Databricks not configured, attempting fallback to LM Studio...")
+        return call_lm_studio_fallback(prompt, temperature)
+    
     headers = {
-        "Authorization": f"Bearer {DATABRICKS_TOKEN}",
+        "Authorization": f"Bearer {databricks_config['token']}",
         "Content-Type": "application/json"
     }
     
-    endpoint_name = "databricks-claude-sonnet-4"
-    url = f"https://dbc-3735add4-1cb6.cloud.databricks.com/serving-endpoints/{endpoint_name}/invocations"
+    # Build the URL from configuration
+    base_url = databricks_config["base_url"]
+    endpoint_path = databricks_config.get("endpoint", "/serving-endpoints/databricks-claude-sonnet-4/invocations")
+    
+    # Handle both full URLs and base URLs
+    if endpoint_path.startswith("http"):
+        url = endpoint_path
+    else:
+        url = f"{base_url.rstrip('/')}{endpoint_path}"
     
     data = {
         "messages": [
@@ -26,7 +45,7 @@ def call_databricks_llm(prompt, temperature=0.0):
     }
     
     try:
-        response = requests.post(url, headers=headers, data=json.dumps(data))
+        response = requests.post(url, headers=headers, data=json.dumps(data), timeout=60)
         if response.status_code == 200:
             result = response.json()
             # Extract the text content from the response
@@ -42,10 +61,49 @@ def call_databricks_llm(prompt, temperature=0.0):
                     return message["content"]
             return None
         else:
-            print(f"Error: {response.status_code} - {response.text}")
-            return None
+            print(f"Databricks LLM Error: {response.status_code} - {response.text}")
+            print("Attempting fallback to LM Studio...")
+            return call_lm_studio_fallback(prompt, temperature)
     except Exception as e:
         print(f"Error connecting to Databricks LLM: {e}")
+        print("Attempting fallback to LM Studio...")
+        return call_lm_studio_fallback(prompt, temperature)
+
+def call_lm_studio_fallback(prompt, temperature=0.0):
+    """
+    Fallback to LM Studio when Databricks is unavailable.
+    """
+    lm_studio_config = LLM_CONFIG["lm_studio"]
+    
+    if not lm_studio_config["enabled"]:
+        print("Both Databricks and LM Studio are unavailable. Please configure at least one LLM endpoint.")
+        return None
+    
+    try:
+        import openai
+        
+        # Configure OpenAI client for LM Studio
+        client = openai.OpenAI(
+            base_url=lm_studio_config["api_base"],
+            api_key=lm_studio_config["api_key"]
+        )
+        
+        response = client.chat.completions.create(
+            model="local-model",  # LM Studio uses this as placeholder
+            messages=[
+                {"role": "user", "content": prompt}
+            ],
+            temperature=temperature,
+            timeout=60
+        )
+        
+        return response.choices[0].message.content
+        
+    except ImportError:
+        print("OpenAI library not installed. Install with: pip install openai")
+        return None
+    except Exception as e:
+        print(f"Error connecting to LM Studio: {e}")
         return None
 
 def generate_review(code_chunk, rules, retrieval_method="Vector Search"):
@@ -66,8 +124,42 @@ def generate_review(code_chunk, rules, retrieval_method="Vector Search"):
     # Default temperature for deterministic output
     temperature = 0.0
 
+    # Handle database unavailable scenarios - fallback to AI analysis
+    if retrieval_method in ["Database Unavailable - AI Fallback", "Rule Retrieval Failed - AI Fallback", "Error"]:
+        temperature = 0.75
+        prompt = f"""You are a highly intelligent SQL code review assistant. The rule-based retrieval system is currently unavailable (database connection issues), so you must rely entirely on your extensive knowledge of SQL best practices to conduct a thorough review.
+
+**Code to Review:**
+```
+{code_chunk}
+```
+
+**Task:**
+1.  **Analyze the code comprehensively using your knowledge.** Look for common SQL anti-patterns, performance issues, security vulnerabilities, and maintainability concerns.
+2.  **Focus on practical, actionable feedback.** Prioritize issues that could impact performance, security, or code maintainability.
+3.  **Be concise and group related feedback.** If multiple suggestions apply to the same issue, combine them into a single, comprehensive suggestion. Aim to provide a maximum of three distinct, high-impact suggestions for the code chunk.
+4.  If you identify any issues, create a JSON object describing them. Your response MUST be a single, valid JSON object.
+5.  For each issue, provide **only** these three keys: `line_number` (relative to the chunk), `severity` (use "AI Generated Suggestion"), and `suggestion`. **Do not include a `rule_id` or any other keys.**
+6.  If you find no issues, you MUST return this exact JSON object: `{{"issues_found": 0, "issues": []}}`
+
+**Example of a valid response:**
+```json
+{{
+  "issues_found": 1,
+  "issues": [
+    {{
+      "line_number": 5,
+      "severity": "AI Generated Suggestion",
+      "suggestion": "Consider replacing the correlated subquery with an INNER JOIN for potentially better performance, as it can leverage hash joins more effectively."
+    }}
+  ]
+}}
+```
+
+JSON Response:"""
+
     # Dynamically construct the prompt based on the retrieval method
-    if retrieval_method == "Regex Match":
+    elif retrieval_method == "Regex Match":
         prompt = f"""You are a precise code review assistant. A code snippet has been identified as potentially violating one or more bad practices via direct Regex Matches.
 
 **Bad Practices Found by Regex:**
@@ -85,7 +177,7 @@ def generate_review(code_chunk, rules, retrieval_method="Vector Search"):
 4.  If you cannot confirm any of the violations, you MUST return this exact JSON object: `{{"issues_found": 0, "issues": []}}`
 
 JSON Response:"""
-    else:  # Vector Search
+    else:  # Vector Search, Hybrid Match, No Matches
         if rules.get('bad_practices'):
             prompt = f"""You are a precise and discerning code review assistant. Your task is to carefully analyze a code snippet and determine if it violates any of the *potential* bad practices listed below. These rules were identified as potentially relevant through a semantic search, but they may not all be applicable.
 

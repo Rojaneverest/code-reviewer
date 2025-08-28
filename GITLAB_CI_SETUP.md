@@ -1,86 +1,104 @@
-# GitLab CI/CD Setup for SQL Code Review
+# GitLab CI/CD Setup for SQL Code Review with Supabase
 
 ## 🎯 Overview
-This setup enables automated SQL code review using PostgreSQL service in GitLab CI/CD pipelines.
+This setup enables automated SQL code review using a Supabase cloud database in GitLab CI/CD pipelines.
 
 ## 🔧 Configuration Changes Made
 
-### 1. GitLab CI Pipeline (.gitlab-ci.yml)
-- ✅ Added PostgreSQL 13 service
-- ✅ Configured PostgreSQL environment variables
-- ✅ Added database initialization step
-- ✅ Updated variable references to match your naming convention
+### 1. Migration from GitLab PostgreSQL Service to Supabase
+- ❌ Removed unreliable GitLab PostgreSQL service
+- ✅ Migrated to Supabase cloud database for better reliability  
+- ✅ Added database connection precheck stage
+- ✅ Improved pipeline failure detection
 
 ### 2. Environment Variables in GitLab CI/CD
 **Required Variables** (set these in GitLab Project Settings → CI/CD → Variables):
 
+#### Database Connection (Supabase)
 ```
-DATABRICKS_TOKEN = abc
-GITLAB_API_TOKEN = cde
-dbname = rules
-user = postgres
-password = root
-host = postgres  # Note: Use 'postgres' for GitLab CI service
+host = db.ziuhftkruvdlwiyfepop.supabase.co
 port = 5432
+dbname = postgres
+user = postgres
+password = [your_supabase_password]  # Mark as Protected & Masked
+```
+
+#### AI Integration (Databricks)
+```
+DATABRICKS_TOKEN = [your_databricks_token]  # Mark as Protected & Masked
+DATABRICKS_BASE_URL = [your_databricks_workspace_url]
+```
+
+#### GitLab Integration
+```
+GITLAB_TOKEN = [your_gitlab_personal_access_token]  # Mark as Protected & Masked
 ```
 
 ### 3. Database Configuration (config.py)
 - ✅ Updated to read from environment variables
 - ✅ Uses your variable naming convention
-- ✅ Maintains localhost fallback for local development
+- ✅ Supports Supabase cloud database connection
 
-### 4. CI Database Setup (setup_ci_database.py)
-- ✅ Uses existing `database/insert_rules.sql` for rule insertion
+### 4. Cloud Database Setup (cloud_db_setup.py)
+- ✅ Connects to Supabase cloud database
+- ✅ Uses existing `database/insert_rules.sql` for rule insertion  
 - ✅ Runs `rag/vectorize_rules.py` to generate embeddings
-- ✅ Waits for PostgreSQL to be ready
+- ✅ No waiting for PostgreSQL service (instant connection)
 - ✅ Creates rules table with vector column for embeddings
-- ✅ Uses your variable naming convention
 - ✅ Handles both local model loading and HuggingFace downloads
 
-### 5. Environment Validation (gitlab_env_check.py)
-- ✅ Updated to check your variable names
-- ✅ Validates PostgreSQL service connectivity
-- ✅ Provides clear error messages and setup instructions
+### 5. Database Connection Precheck (test_supabase_connection.py)
+- ✅ Early validation of Supabase database connectivity
+- ✅ Provides clear error messages and troubleshooting tips
+- ✅ Tests read/write permissions before main pipeline
+- ✅ Fails fast to save CI/CD minutes
 
 ## 🚀 How It Works
 
 1. **Merge Request Created** → GitLab triggers CI pipeline
-2. **Precheck Stage** → Validates all environment variables
-3. **PostgreSQL Service** → Starts automatically 
-4. **Database Setup** → Loads rules from `database/insert_rules.sql`
-5. **Rule Vectorization** → Runs `rag/vectorize_rules.py` to generate embeddings
-6. **SQL Review Stage** → Analyzes changed SQL files and posts comments
+2. **Precheck Stage** → Validates environment and installs dependencies
+3. **Database Check Stage** → Tests Supabase connection (fails fast if issues)
+4. **SQL Review Stage** → Sets up cloud database and analyzes SQL files
 
-## 🔄 Key Changes from Local Setup
+## 🔄 Key Changes from PostgreSQL Service Approach
 
-| Local Development | GitLab CI |
-|-------------------|-----------|
-| `host = localhost` | `host = postgres` |
-| Local PostgreSQL instance | PostgreSQL service container |
-| Manual database setup | Automated via `setup_ci_database.py` |
-| Local model files | Uses existing models/ folder or downloads from HuggingFace |
-| Manual rule vectorization | Automated via `rag/vectorize_rules.py` |
+| GitLab PostgreSQL Service | Supabase Cloud Database |
+|---------------------------|-------------------------|
+| `host = postgres` | `host = db.ziuhftkruvdlwiyfepop.supabase.co` |
+| PostgreSQL service container | Supabase cloud database |
+| Wait for service startup (60+ attempts) | Instant connection |
+| Service reliability issues | ✅ Highly reliable cloud service |
+| `setup_ci_database.py` | `cloud_db_setup.py` |
+| No connection precheck | ✅ Early database validation |
 
 ## ✅ Next Steps
 
-1. **Set GitLab CI/CD Variables**: Add the required variables in your GitLab project
-2. **Test Pipeline**: Create a test merge request with SQL changes
-3. **Monitor**: Check pipeline logs for any issues
+1. **Set GitLab CI/CD Variables**: Add the Supabase connection variables
+2. **Test Database Connection**: Run `python test_supabase_connection.py` locally first
+3. **Test Pipeline**: Create a test merge request with SQL changes
+4. **Monitor**: Check pipeline logs for any issues
 
 ## 🐛 Troubleshooting
 
-- **Database Connection Failed**: Ensure `host=postgres` in GitLab CI variables
-- **Missing Variables**: Check environment validation in precheck stage
-- **Token Issues**: Verify DATABRICKS_TOKEN and GITLAB_API_TOKEN formats
-- **Model Download Issues**: First run may take longer as models download from HuggingFace
-- **Memory Issues**: CodeT5 model requires sufficient memory; consider using smaller models for CI
+### Database Connection Issues
+- **Connection Failed**: Verify Supabase credentials in GitLab CI/CD variables
+- **Missing Variables**: Check that host, port, dbname, user, password are all set
+- **Password Issues**: Ensure password is correct and marked as Protected & Masked
+- **Network Issues**: Supabase should be accessible from GitLab CI runners
 
-## ⚡ Performance Notes
+### Pipeline Issues  
+- **Database Check Fails**: Check the database-check stage logs first
+- **Token Issues**: Verify DATABRICKS_TOKEN and GITLAB_TOKEN formats
+- **Model Download Issues**: First run may take longer as models download
+- **Memory Issues**: CodeT5 model requires sufficient memory
 
-- **First Run**: May take 5-10 minutes as it downloads CodeT5 model (~200MB)
-- **Subsequent Runs**: Faster as model is cached
-- **Model Location**: Uses local `models/codet5p-220m/` if available, otherwise downloads
-- **Memory Usage**: CodeT5 requires ~500MB RAM for embeddings generation
+## ⚡ Performance Benefits
+
+- **Faster Startup**: No waiting for PostgreSQL service (saves 2-5 minutes per run)
+- **More Reliable**: Cloud database eliminates service connectivity issues
+- **Persistent Data**: Rules and vectors persist between pipeline runs
+- **Early Failure Detection**: Database-check stage fails fast if connection issues
+- **Better Monitoring**: Clear connection status and error messages
 
 ## 📁 Files Modified
 

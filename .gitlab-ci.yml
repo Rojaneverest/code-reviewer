@@ -1,22 +1,18 @@
 # GitLab CI/CD configuration for SQL Code Review
-image: python:3.9
-
+# Configured to run on local Windows runner with PowerShell
 stages:
   - precheck
-  - test
+  - database-check
   - sql-review
 
-# PostgreSQL service for CI environment
-services:
-  - postgres:13
-
 variables:
-  PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
-  # PostgreSQL service configuration
-  POSTGRES_DB: rules
-  POSTGRES_USER: postgres
-  POSTGRES_PASSWORD: root
-  POSTGRES_HOST_AUTH_METHOD: trust
+  PIP_CACHE_DIR: "$CI_PROJECT_DIR\\.cache\\pip"
+  PYTHONUNBUFFERED: "1"
+
+# Default tags for all jobs to run on local runner
+default:
+  tags:
+    - ai-code-reviewer
 
 cache:
   paths:
@@ -26,32 +22,39 @@ cache:
 # Pre-check job: validates GitLab CI environment variables
 precheck-gitlab-env:
   stage: precheck
-  image: python:3.9
   script:
-    - echo "🔍 Validating GitLab CI/CD environment..."
+    - python -m pip install --upgrade pip
+    - pip install python-dotenv psycopg2-binary
     - python gitlab_env_check.py
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
 
-# SQL Code Review Job - runs only if precheck passes
+# Database connectivity check: validates local PostgreSQL connection
+# This job is allowed to fail - the pipeline will continue with AI-only analysis
+precheck-database:
+  stage: database-check
+  needs: [precheck-gitlab-env]
+  script:
+    - pip install psycopg2-binary
+    - python verify_local_database.py
+  allow_failure: true
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+
+# SQL Code Review Job - runs regardless of database connectivity
 sql-code-review:
   stage: sql-review
-  image: python:3.9
-  services:
-    - postgres:13
   needs: [precheck-gitlab-env]
   before_script:
-    - apt-get update -qq && apt-get install -y -qq postgresql-client
     - python -m venv venv
-    - source venv/bin/activate
-    - pip install --upgrade pip
+    - if ($IsWindows) { venv\Scripts\Activate.ps1 } else { source venv/bin/activate }
+    - python -m pip install --upgrade pip
     - pip install -r requirements.txt
-    # Initialize database with SQL rules and vectorization
-    - echo "🔧 Setting up PostgreSQL with SQL rules and embeddings..."
-    - python setup_ci_database.py
+    - Write-Host "🌟 Setting up local database connection and vectorizing rules..."
+    - python verify_local_database.py
   script:
-    - source venv/bin/activate
-    - echo "🔍 Analyzing SQL changes in merge request..."
+    - if ($IsWindows) { venv\Scripts\Activate.ps1 } else { source venv/bin/activate }
+    - Write-Host "🔍 Analyzing SQL changes in merge request..."
     - python gitlab_ci_analyzer.py
   artifacts:
     paths:
@@ -60,13 +63,3 @@ sql-code-review:
   allow_failure: true
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
-
-# Optional: Local environment test (runs on regular commits)
-test-local-env:
-  stage: test
-  image: python:3.9
-  script:
-    - pip install python-dotenv
-    - python test_env_vars.py
-  rules:
-    - if: $CI_COMMIT_BRANCH && $CI_PIPELINE_SOURCE != "merge_request_event"

@@ -158,11 +158,13 @@ def find_relevant_rules(code_chunk: str, language: str = 'SQL', top_k: int = 3,
         return relevant_rules, method
 
     except psycopg2.Error as e:
-        logger.error(f"Database error: {e}")
-        return {'good_practices': [], 'bad_practices': []}, "Error"
+        logger.warning(f"Database connection failed: {e}")
+        logger.info("Falling back to pure AI analysis - database rules unavailable")
+        return {'good_practices': [], 'bad_practices': []}, "Database Unavailable - AI Fallback"
     except Exception as e:
-        logger.error(f"An unexpected error occurred: {e}")
-        return {'good_practices': [], 'bad_practices': []}, "Error"
+        logger.warning(f"An unexpected error occurred: {e}")
+        logger.info("Falling back to pure AI analysis - rule retrieval failed")
+        return {'good_practices': [], 'bad_practices': []}, "Rule Retrieval Failed - AI Fallback"
     finally:
         if conn:
             conn.close()
