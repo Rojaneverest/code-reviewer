@@ -60,13 +60,13 @@ prompt_var() {
 }
 
 echo
-echo "🗄️  Database Configuration (Supabase)"
-echo "-----------------------------------"
-prompt_var "host" "Database host (e.g., db.your-project.supabase.co)" false
+echo "🗄️  Database Configuration (Local PostgreSQL)"
+echo "--------------------------------------------"
+prompt_var "host" "Database host (default: localhost)" false
 prompt_var "port" "Database port (default: 5432)" false
-prompt_var "dbname" "Database name (default: postgres)" false
+prompt_var "dbname" "Database name (default: rules)" false
 prompt_var "user" "Database user (default: postgres)" false
-prompt_var "password" "Database password" true
+prompt_var "password" "Database password (default: root)" true
 
 echo
 echo "🤖 Databricks LLM Configuration"

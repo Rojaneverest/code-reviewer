@@ -88,24 +88,28 @@ def main():
     
     print_section("📋 Setup Steps Summary")
     print("""
-1. 🏗️  Install GitLab Runner on your local machine:
+1. 🏗️  Install PostgreSQL and GitLab Runner:
+   • Windows: Follow instructions in windows-runner-setup.md
    • Linux/macOS: Follow instructions in local-runner-setup.md
-   • Docker: Use docker-compose.runner.yml
 
-2. 🔐 Configure Environment Variables:
-   • Run: sudo ./setup_local_runner_env.sh
-   • Or manually create environment file from template
+2. 🗄️  Set up Local Database:
+   • Create PostgreSQL database 'rules'
+   • Run: python verify_local_database.py
 
-3. 📝 Register GitLab Runner:
+3. 🔐 Configure Environment Variables:
+   • Windows: Run setup_windows_runner_env.ps1 as Administrator
+   • Linux: Run sudo ./setup_local_runner_env.sh
+
+4. 📝 Register GitLab Runner:
    • Get registration token from GitLab project settings
-   • Run: sudo gitlab-runner register
-   • Use tags: local-runner,ai-review
+   • Use tags: ai-code-reviewer
+   • Windows: shell executor, Linux: docker executor
 
-4. ✅ Test Configuration:
-   • Run: python3 check_local_runner.py
+5. ✅ Test Configuration:
+   • Run: python check_local_runner.py
    • Verify all connections work
 
-5. 🚀 Test Pipeline:
+6. 🚀 Test Pipeline:
    • Create a merge request with SQL changes
    • Verify it runs on your local runner
    • Check AI review comments are posted

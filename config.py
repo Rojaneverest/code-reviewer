@@ -1,12 +1,12 @@
 import os
 
 # PostgreSQL Database Configuration
-# Uses environment variables with fallbacks for local development
+# Uses local PostgreSQL database since runner runs locally
 DB_CONFIG = {
     "dbname": os.getenv("dbname", "rules"),
     "user": os.getenv("user", "postgres"),
     "password": os.getenv("password", "root"),
-    "host": os.getenv("host", "localhost"),  # Will be 'postgres' in GitLab CI
+    "host": os.getenv("host", "localhost"),  # Local PostgreSQL database
     "port": os.getenv("port", "5432")
 }
 

@@ -19,7 +19,7 @@ def check_environment_variables():
     print("🔍 Checking Environment Variables...")
     
     required_vars = {
-        'Database Connection': [
+        'Database Connection (Local PostgreSQL)': [
             'host', 'port', 'dbname', 'user', 'password'
         ],
         'Databricks LLM': [
@@ -56,29 +56,46 @@ def check_environment_variables():
     return all_good
 
 def check_database_connection():
-    """Test database connectivity."""
-    print("\n🗄️  Testing Database Connection...")
+    """Test local PostgreSQL database connectivity."""
+    print("\n🗄️  Testing Local PostgreSQL Database Connection...")
     
     try:
         conn = psycopg2.connect(
-            host=os.getenv('host'),
-            port=os.getenv('port'),
-            database=os.getenv('dbname'),
-            user=os.getenv('user'),
-            password=os.getenv('password')
+            host=os.getenv('host', 'localhost'),
+            port=os.getenv('port', '5432'),
+            database=os.getenv('dbname', 'rules'),
+            user=os.getenv('user', 'postgres'),
+            password=os.getenv('password', 'root')
         )
         cursor = conn.cursor()
         cursor.execute("SELECT version();")
         version = cursor.fetchone()[0]
+        
+        # Check if rules table exists
+        cursor.execute("""
+            SELECT EXISTS (
+                SELECT FROM information_schema.tables 
+                WHERE table_name = 'rules'
+            );
+        """)
+        rules_table_exists = cursor.fetchone()[0]
+        
         cursor.close()
         conn.close()
         
-        print(f"    ✅ Database connection successful")
+        print(f"    ✅ Local PostgreSQL connection successful")
         print(f"    📋 PostgreSQL version: {version}")
+        print(f"    📋 Rules table exists: {'Yes' if rules_table_exists else 'No'}")
+        
+        if not rules_table_exists:
+            print(f"    ⚠️  Rules table not found. Run 'python database/setup_db.py' to create it.")
+        
         return True
         
     except Exception as e:
-        print(f"    ❌ Database connection failed: {e}")
+        print(f"    ❌ Local PostgreSQL connection failed: {e}")
+        print(f"    💡 Make sure PostgreSQL is running locally and the database 'rules' exists")
+        print(f"    💡 Default connection: host=localhost, port=5432, dbname=rules, user=postgres, password=root")
         return False
 
 def check_databricks_llm():
@@ -205,6 +222,47 @@ def check_runner_network():
     
     return all_good
 
+def check_windows_environment():
+    """Check Windows-specific runner environment."""
+    print("\n🪟 Checking Windows Environment...")
+    
+    import platform
+    if platform.system() != "Windows":
+        print("    ℹ️  Not running on Windows - skipping Windows-specific checks")
+        return True
+    
+    try:
+        # Check if running as admin/elevated
+        import ctypes
+        is_admin = ctypes.windll.shell32.IsUserAnAdmin()
+        print(f"    {'✅' if is_admin else '⚠️ '} Running as Administrator: {is_admin}")
+        
+        # Check PowerShell availability
+        import subprocess
+        result = subprocess.run(['powershell', '-Command', 'Get-Host'], 
+                              capture_output=True, text=True, timeout=10)
+        if result.returncode == 0:
+            print("    ✅ PowerShell available")
+        else:
+            print("    ❌ PowerShell not available")
+            return False
+        
+        # Check Python availability
+        result = subprocess.run(['python', '--version'], 
+                              capture_output=True, text=True, timeout=10)
+        if result.returncode == 0:
+            version = result.stdout.strip()
+            print(f"    ✅ Python available: {version}")
+        else:
+            print("    ❌ Python not available in PATH")
+            return False
+        
+        return True
+        
+    except Exception as e:
+        print(f"    ⚠️  Windows environment check failed: {e}")
+        return False
+
 def main():
     """Main function to run all checks."""
     print("🚀 Local GitLab Runner Configuration Checker")
@@ -213,6 +271,7 @@ def main():
     checks = [
         ("Environment Variables", check_environment_variables),
         ("Network Connectivity", check_runner_network),
+        ("Windows Environment", check_windows_environment),
         ("Database Connection", check_database_connection),
         ("Databricks LLM", check_databricks_llm),
         ("GitLab API", check_gitlab_api)

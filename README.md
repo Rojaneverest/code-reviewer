@@ -8,6 +8,30 @@ This project can be configured to run on your local machine instead of GitLab's 
 
 ### Quick Start for Local Runner
 
+#### Windows Setup
+1. **Install GitLab Runner** (see [windows-runner-setup.md](windows-runner-setup.md) for detailed instructions)
+
+2. **Configure Environment Variables:**
+   ```powershell
+   # Run as Administrator
+   .\setup_windows_runner_env.ps1
+   ```
+
+3. **Register the Runner:**
+   ```powershell
+   cd C:\GitLab-Runner
+   .\gitlab-runner.exe register
+   ```
+   - Tags: `ai-code-reviewer`
+   - Executor: `shell`
+   - Shell: `pwsh`
+
+4. **Test Configuration:**
+   ```powershell
+   python check_local_runner.py
+   ```
+
+#### Linux/macOS Setup
 1. **Install GitLab Runner** (see [local-runner-setup.md](local-runner-setup.md) for detailed instructions)
 
 2. **Configure Environment Variables:**
@@ -19,7 +43,7 @@ This project can be configured to run on your local machine instead of GitLab's 
    ```bash
    sudo gitlab-runner register
    ```
-   - Tags: `local-runner,ai-review`
+   - Tags: `ai-code-reviewer`
    - Executor: `docker`
    - Default image: `python:3.9`
 
