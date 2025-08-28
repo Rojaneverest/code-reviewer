@@ -109,6 +109,16 @@ def call_lm_studio_fallback(prompt, temperature=0.0):
 def generate_review(code_chunk, rules, retrieval_method="Vector Search"):
     """Generates a code review in a structured JSON format by calling the Databricks model."""
     
+    # Add line numbers to the code chunk for clarity
+    def add_line_numbers_to_chunk(chunk):
+        """Add line numbers to code chunk to make line references clear to LLM."""
+        numbered_lines = []
+        for i, line in enumerate(chunk.splitlines(), 1):
+            numbered_lines.append(f"{i:2d}: {line}")
+        return "\n".join(numbered_lines)
+    
+    numbered_code_chunk = add_line_numbers_to_chunk(code_chunk)
+    
     # Prepare the bad practices section of the prompt
     bad_practices_text = "\n".join([
         f"- {rule['title']} (Rule ID: {rule['id']}, Severity: {rule['severity']}): {rule['description']}"
@@ -129,17 +139,27 @@ def generate_review(code_chunk, rules, retrieval_method="Vector Search"):
         temperature = 0.75
         prompt = f"""You are a highly intelligent SQL code review assistant. The rule-based retrieval system is currently unavailable (database connection issues), so you must rely entirely on your extensive knowledge of SQL best practices to conduct a thorough review.
 
-**Code to Review:**
+**Code to Review (with line numbers for your reference):**
 ```
-{code_chunk}
+{numbered_code_chunk}
 ```
+
+**CRITICAL:** When reporting issues, use the line numbers shown in the code above (1-{len(code_chunk.splitlines())}). Do NOT try to calculate or guess other line numbers.
+
+**IMPORTANT - SELECT * GUIDELINES:**
+- DO NOT flag "SELECT *" as an issue when it's used in:
+  * CREATE VIEW or CREATE TEMP VIEW statements (data loading/transformation)
+  * SELECT * FROM (subquery) where the subquery explicitly lists specific columns
+  * Data pipeline operations, ETL processes, or data movement between tables
+  * Any context where the columns are already well-defined in an inner query
+- ONLY flag "SELECT *" when it's used directly against base tables without column specification in application queries
 
 **Task:**
 1.  **Analyze the code comprehensively using your knowledge.** Look for common SQL anti-patterns, performance issues, security vulnerabilities, and maintainability concerns.
 2.  **Focus on practical, actionable feedback.** Prioritize issues that could impact performance, security, or code maintainability.
 3.  **Be concise and group related feedback.** If multiple suggestions apply to the same issue, combine them into a single, comprehensive suggestion. Aim to provide a maximum of three distinct, high-impact suggestions for the code chunk.
 4.  If you identify any issues, create a JSON object describing them. Your response MUST be a single, valid JSON object.
-5.  For each issue, provide **only** these three keys: `line_number` (relative to the chunk), `severity` (use "AI Generated Suggestion"), and `suggestion`. **Do not include a `rule_id` or any other keys.**
+5.  For each issue, provide **only** these three keys: `line_number` (use the numbers shown in the code above), `severity` (use "AI Generated Suggestion"), and `suggestion`. **Do not include a `rule_id` or any other keys.**
 6.  If you find no issues, you MUST return this exact JSON object: `{{"issues_found": 0, "issues": []}}`
 
 **Example of a valid response:**
@@ -165,17 +185,26 @@ JSON Response:"""
 **Bad Practices Found by Regex:**
 {bad_practices_text}
 
-**Code to Review:**
+**Code to Review (with line numbers for your reference):**
 ```
-{code_chunk}
+{numbered_code_chunk}
 ```
+
+**CRITICAL:** When reporting issues, use the line numbers shown in the code above (1-{len(code_chunk.splitlines())}). Do NOT try to calculate or guess other line numbers.
+
+**IMPORTANT - SELECT * GUIDELINES:**
+- DO NOT flag "SELECT *" as an issue when it's used in:
+  * CREATE VIEW or CREATE TEMP VIEW statements (data loading/transformation)
+  * SELECT * FROM (subquery) where the subquery explicitly lists specific columns
+  * Data pipeline operations, ETL processes, or data movement between tables
+  * Any context where the columns are already well-defined in an inner query
+- ONLY flag "SELECT *" when it's used directly against base tables without column specification in application queries
 
 **Task:**
 1.  Your task is to review the code and confirm each violation from the list of 'Bad Practices Found by Regex'.
-2.  Only include "select * from" bad practice as a review if it is not being used to load/unload data from or to a table or data repository. 
-3.  Your response MUST be a single, valid JSON object. The JSON should contain a list of all confirmed issues.
-4.  For each issue, provide **only** these four keys: `line_number` (relative to the chunk), `severity`, `rule_id`, and `suggestion`. **Do not add any other keys.**
-5.  If you cannot confirm any of the violations, you MUST return this exact JSON object: `{{"issues_found": 0, "issues": []}}`
+2.  Your response MUST be a single, valid JSON object. The JSON should contain a list of all confirmed issues.
+3.  For each issue, provide **only** these four keys: `line_number` (use the numbers shown in the code above), `severity`, `rule_id`, and `suggestion`. **Do not add any other keys.**
+4.  If you cannot confirm any of the violations, you MUST return this exact JSON object: `{{"issues_found": 0, "issues": []}}`
 
 JSON Response:"""
     else:  # Vector Search, Hybrid Match, No Matches
@@ -188,36 +217,54 @@ JSON Response:"""
 **Good Practices to Follow (for context, not for flagging issues):**
 {good_practices_text}
 
-**Code to Review:**
+**Code to Review (with line numbers for your reference):**
 ```
-{code_chunk}
+{numbered_code_chunk}
 ```
+
+**CRITICAL:** When reporting issues, use the line numbers shown in the code above (1-{len(code_chunk.splitlines())}). Do NOT try to calculate or guess other line numbers.
+
+**IMPORTANT - SELECT * GUIDELINES:**
+- DO NOT flag "SELECT *" as an issue when it's used in:
+  * CREATE VIEW or CREATE TEMP VIEW statements (data loading/transformation)
+  * SELECT * FROM (subquery) where the subquery explicitly lists specific columns
+  * Data pipeline operations, ETL processes, or data movement between tables
+  * Any context where the columns are already well-defined in an inner query
+- ONLY flag "SELECT *" when it's used directly against base tables without column specification in application queries
 
 **Task:**
 1.  **Critically evaluate** the 'Code to Review' against each of the 'Potential Bad Practices'.
-2.  Only include "select * from" bad practice as a review if it is not being used to load/unload data from or to a table or data repository.
-3.  If you find a genuine violation, create a JSON object with the issue details. **Provide concise, actionable suggestions.**
-4.  **Crucially, if the code does NOT violate any of the listed bad practices, you MUST return an empty list of issues.**
-5.  Your response MUST be a single, valid JSON object. If no violations are found, return this exact JSON object: `{{"issues_found": 0, "issues": []}}`
-6.  Each issue object MUST contain **only** these four keys: `line_number` (relative to the chunk), `severity`, `rule_id`, and `suggestion`. **Do not add any other keys.**
+2.  If you find a genuine violation, create a JSON object with the issue details. **Provide concise, actionable suggestions.**
+3.  **Crucially, if the code does NOT violate any of the listed bad practices, you MUST return an empty list of issues.**
+4.  Your response MUST be a single, valid JSON object. If no violations are found, return this exact JSON object: `{{"issues_found": 0, "issues": []}}`
+5.  Each issue object MUST contain **only** these four keys: `line_number` (use the numbers shown in the code above), `severity`, `rule_id`, and `suggestion`. **Do not add any other keys.**
 
 JSON Response:"""
         else:
             temperature = 0.75
             prompt = f"""You are a highly intelligent SQL code review assistant. Your primary method of finding issues (rule-based retrieval) found no relevant rules for the following code. Therefore, you must now rely entirely on your own extensive knowledge of SQL best practices to conduct a thorough review. The SQL code is written by skilled developers, so focus on advanced techniques and suggestions rather than basic tips.
 
-**Code to Review:**
+**Code to Review (with line numbers for your reference):**
 ```
-{code_chunk}
+{numbered_code_chunk}
 ```
+
+**CRITICAL:** When reporting issues, use the line numbers shown in the code above (1-{len(code_chunk.splitlines())}). Do NOT try to calculate or guess other line numbers.
+
+**IMPORTANT - SELECT * GUIDELINES:**
+- DO NOT flag "SELECT *" as an issue when it's used in:
+  * CREATE VIEW or CREATE TEMP VIEW statements (data loading/transformation)
+  * SELECT * FROM (subquery) where the subquery explicitly lists specific columns
+  * Data pipeline operations, ETL processes, or data movement between tables
+  * Any context where the columns are already well-defined in an inner query
+- ONLY flag "SELECT *" when it's used directly against base tables without column specification in application queries
 
 **Task:**
 1.  **Analyze the code creatively and critically.** Look for anti-patterns, performance bottlenecks (like correlated subqueries), or security risks that may not be in a standard rulebook.
-2.  Only include "select * from" bad practice as a review if it is not being used to load/unload data from or to a table or data repository.
-3.  **Be concise and group related feedback.** If multiple suggestions apply to the same issue, combine them into a single, comprehensive suggestion. Aim to provide a maximum of three distinct, high-impact suggestions for the code chunk.
-4.  If you identify any issues, create a JSON object describing them. Your response MUST be a single, valid JSON object.
-5.  For each issue, provide **only** these three keys: `line_number` (relative to the chunk), `severity` (use "AI Generated Suggestion"), and `suggestion`. **Do not include a `rule_id` or any other keys.**
-6.  If you find no issues, you MUST return this exact JSON object: `{{"issues_found": 0, "issues": []}}`
+2.  **Be concise and group related feedback.** If multiple suggestions apply to the same issue, combine them into a single, comprehensive suggestion. Aim to provide a maximum of three distinct, high-impact suggestions for the code chunk.
+3.  If you identify any issues, create a JSON object describing them. Your response MUST be a single, valid JSON object.
+4.  For each issue, provide **only** these three keys: `line_number` (use the numbers shown in the code above), `severity` (use "AI Generated Suggestion"), and `suggestion`. **Do not include a `rule_id` or any other keys.**
+5.  If you find no issues, you MUST return this exact JSON object: `{{"issues_found": 0, "issues": []}}`
 
 **Example of a valid response:**
 ```json
