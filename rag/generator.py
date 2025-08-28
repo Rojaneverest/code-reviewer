@@ -277,7 +277,8 @@ JSON Response:"""
 **CRITICAL - SUGGESTION FORMATTING:**
 - In your `suggestion` text, DO NOT mention specific line numbers (like "line 5", "lines 2-3", etc.)
 - Instead, refer to code elements by their content (e.g., "the COALESCE expression", "the WHERE clause", "the JOIN operation")
-- Focus on describing WHAT the issue is and HOW to fix it, not WHERE it appears
+- Focus on describing WHAT the issue is and HOW to fix it, not WHERE it appears.
+- AGAIN, NO LINE NUMBERS IN SUGGESTIONS. 
 
 **Task:**
 1.  **Analyze the code creatively and critically.** Look for anti-patterns, performance bottlenecks (like correlated subqueries), or security risks that may not be in a standard rulebook.
