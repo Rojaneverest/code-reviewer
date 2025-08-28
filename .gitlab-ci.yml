@@ -1,8 +1,6 @@
 # GitLab CI/CD configuration for SQL Code Review
 # Configured to run on local Windows runner with PowerShell
 stages:
-  - precheck
-  - database-check
   - sql-review
 
 variables:
@@ -20,39 +18,14 @@ cache:
     - .cache/pip/
     - venv/
 
-# Pre-check job: validates GitLab CI environment variables
-precheck-gitlab-env:
-  stage: precheck
-  script:
-    - python -m pip install --upgrade pip
-    - pip install python-dotenv psycopg2-binary
-    - python gitlab_env_check.py
-  rules:
-    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
-
-# Database connectivity check: validates local PostgreSQL connection
-# This job is allowed to fail - the pipeline will continue with AI-only analysis
-precheck-database:
-  stage: database-check
-  needs: [precheck-gitlab-env]
-  script:
-    - pip install psycopg2-binary
-    - python verify_local_database.py
-  allow_failure: true
-  rules:
-    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
-
-# SQL Code Review Job - runs regardless of database connectivity
+# SQL Code Review Job - runs with AI-powered analysis
 sql-code-review:
   stage: sql-review
-  needs: [precheck-gitlab-env]
   before_script:
     - python -m venv venv
     - .\venv\Scripts\Activate.ps1
     - python -m pip install --upgrade pip
     - pip install -r requirements.txt
-    - Write-Host "Setting up local database connection and vectorizing rules..."
-    - python verify_local_database.py
   script:
     - .\venv\Scripts\Activate.ps1
     - Write-Host "Analyzing SQL changes in merge request..."
