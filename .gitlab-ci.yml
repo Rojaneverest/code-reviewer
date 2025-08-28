@@ -8,6 +8,7 @@ stages:
 variables:
   PIP_CACHE_DIR: "$CI_PROJECT_DIR\\.cache\\pip"
   PYTHONUNBUFFERED: "1"
+  PYTHONIOENCODING: "utf-8"
 
 # Default tags for all jobs to run on local runner
 default:
@@ -47,14 +48,14 @@ sql-code-review:
   needs: [precheck-gitlab-env]
   before_script:
     - python -m venv venv
-    - if ($IsWindows) { venv\Scripts\Activate.ps1 } else { source venv/bin/activate }
+    - .\venv\Scripts\Activate.ps1
     - python -m pip install --upgrade pip
     - pip install -r requirements.txt
-    - Write-Host "🌟 Setting up local database connection and vectorizing rules..."
+    - Write-Host "Setting up local database connection and vectorizing rules..."
     - python verify_local_database.py
   script:
-    - if ($IsWindows) { venv\Scripts\Activate.ps1 } else { source venv/bin/activate }
-    - Write-Host "🔍 Analyzing SQL changes in merge request..."
+    - .\venv\Scripts\Activate.ps1
+    - Write-Host "Analyzing SQL changes in merge request..."
     - python gitlab_ci_analyzer.py
   artifacts:
     paths:

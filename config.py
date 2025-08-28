@@ -3,11 +3,11 @@ import os
 # PostgreSQL Database Configuration
 # Uses local PostgreSQL database since runner runs locally
 DB_CONFIG = {
-    "dbname": os.getenv("dbname", "rules"),
-    "user": os.getenv("user", "postgres"),
-    "password": os.getenv("password", "root"),
-    "host": os.getenv("host", "localhost"),  # Local PostgreSQL database
-    "port": os.getenv("port", "5432")
+    "dbname": os.getenv("DB_NAME", "rules"),
+    "user": os.getenv("DB_USER", "postgres"),
+    "password": os.getenv("DB_PASSWORD", "root"),
+    "host": os.getenv("DB_HOST", "localhost"),  # Local PostgreSQL database
+    "port": os.getenv("DB_PORT", "5432")
 }
 
 # LLM Configuration - Supports both LM Studio (local dev) and Databricks (production)
