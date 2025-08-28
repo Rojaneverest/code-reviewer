@@ -29,7 +29,7 @@ SELECT id FROM table1 UNION ALL SELECT id FROM table2;
 
 -- A query using a window function (not covered by current rules)
 SELECT
-    employee_name,
+    emp_name,
     department,
     salary,
     RANK() OVER (PARTITION BY department ORDER BY salary DESC) as salary_rank
