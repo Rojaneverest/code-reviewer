@@ -417,7 +417,7 @@ def main():
 
 No SQL files were changed in this merge request.
 
-*🤖 Automated review by SQL Code Reviewer*"""
+*🤖 AI Code Reviewer by Rojan Raj Thapa*"""
         
         post_review_to_gitlab(comment, env_vars)
         print("✅ No SQL files to review")
