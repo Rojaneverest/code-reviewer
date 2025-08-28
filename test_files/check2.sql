@@ -1,5 +1,5 @@
 -- Test SQL file for GitLab CI integration - MODIFIED
-SELECT * FROM users;
+SELECT * FROM products;
 
 DELETE FROM logs;
 

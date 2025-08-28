@@ -6,7 +6,7 @@ SELECT * FROM patients p
 -- Bad: Implicit join with comma
 FROM patients, encounters e, medications m
 -- Bad: Leading wildcard in patient search
-WHERE p.name LIKE '%Smith%'
+WHERE l.name LIKE '%Smith%'
 -- Bad: Function on indexed column
 AND UPPER(p.mrn) = 'MRN123456'
 -- Bad: NOLOCK hint on sensitive data
