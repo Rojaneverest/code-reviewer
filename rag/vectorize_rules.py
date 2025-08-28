@@ -26,12 +26,12 @@ class CodeEmbedder:
         self.model_name = "Salesforce/codet5p-220m"
         
         # Use local models directory if available, otherwise download from HuggingFace
-        local_model_path = os.path.join(project_root, "models", "codet5p-220m")
+        self.local_model_path = r"C:\Users\RojanRajThapa\Desktop\huggingface\codet5p-220m"
         
-        if os.path.exists(local_model_path):
-            logger.info(f"Loading model from local path: {local_model_path}")
-            self.tokenizer = AutoTokenizer.from_pretrained(local_model_path)
-            self.model = AutoModel.from_pretrained(local_model_path)
+        if os.path.exists(self.local_model_path):
+            logger.info(f"Loading model from local path: {self.local_model_path}")
+            self.tokenizer = AutoTokenizer.from_pretrained(self.local_model_path)
+            self.model = AutoModel.from_pretrained(self.local_model_path)
         else:
             logger.info(f"Local model not found. Downloading {self.model_name} from HuggingFace...")
             self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
