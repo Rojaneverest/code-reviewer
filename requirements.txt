@@ -3,3 +3,6 @@ transformers
 psycopg2-binary
 sqlparse
 dotenv
+requests
+openai
+python-dotenv

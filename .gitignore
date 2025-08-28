@@ -90,4 +90,9 @@ venv.bak/
 *.sln
 
 # Secrets
+.env
+.env.*
+!.env.*.template
+*.key
+*.pem
 

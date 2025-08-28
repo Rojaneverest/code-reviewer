@@ -1,4 +1,5 @@
 # GitLab CI/CD configuration for SQL Code Review
+# Configured to run on local runner for AI LLM access
 image: python:3.9
 
 stages:
@@ -8,6 +9,12 @@ stages:
 
 variables:
   PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
+
+# Default tags for all jobs to run on local runner
+default:
+  tags:
+    - local-runner
+    - ai-review
 
 cache:
   paths:
