@@ -1,9 +1,7 @@
 import psycopg2
 import sys
 import os
-import torch
 import numpy as np
-from transformers import AutoTokenizer, AutoModel
 from typing import List, Dict, Any
 import logging
 
@@ -12,6 +10,7 @@ project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(project_root)
 
 from config import DB_CONFIG
+from rag.embedding_service import get_embedding_service
 
 # Set up logging
 logging.basicConfig(
@@ -19,61 +18,6 @@ logging.basicConfig(
     format='%(asctime)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
-
-class CodeEmbedder:
-    def __init__(self):
-        """Initialize the CodeT5 model for code-aware embeddings."""
-        self.model_name = "Salesforce/codet5p-220m"
-        
-        # Use local models directory if available, otherwise download from HuggingFace
-        self.local_model_path = r"C:\Users\RojanRajThapa\Desktop\huggingface\codet5p-220m"
-        
-        if os.path.exists(self.local_model_path):
-            logger.info(f"Loading model from local path: {self.local_model_path}")
-            self.tokenizer = AutoTokenizer.from_pretrained(self.local_model_path)
-            self.model = AutoModel.from_pretrained(self.local_model_path)
-        else:
-            logger.info(f"Local model not found. Downloading {self.model_name} from HuggingFace...")
-            self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
-            self.model = AutoModel.from_pretrained(self.model_name)
-        
-        # Move model to GPU if available
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self.model = self.model.to(self.device)
-        self.model.eval()
-        
-        logger.info(f"Model loaded successfully and running on {self.device}")
-
-    def get_embedding(self, text: str, max_length: int = 512) -> np.ndarray:
-        """Generate embedding for a given text using CodeT5."""
-        with torch.no_grad():
-            inputs = self.tokenizer(
-                text,
-                padding=True,
-                truncation=True,
-                max_length=max_length,
-                return_tensors="pt"
-            ).to(self.device)
-            
-            # Add empty decoder_input_ids
-            decoder_input_ids = torch.zeros(
-                (inputs.input_ids.shape[0], 1), 
-                dtype=torch.long, 
-                device=self.device
-            )
-            
-            outputs = self.model(
-                **inputs,
-                decoder_input_ids=decoder_input_ids,
-                output_hidden_states=True
-            )
-            
-            # Use the last hidden state of the encoder as embeddings
-            embeddings = outputs.encoder_last_hidden_state.mean(dim=1).cpu().numpy()
-            
-            # Normalize the vector
-            normalized_embedding = embeddings[0] / np.linalg.norm(embeddings[0])
-            return normalized_embedding
 
 def combine_rule_text(rule: Dict[str, Any]) -> str:
     """Combine rule components into a single text for embedding."""
@@ -87,8 +31,8 @@ def combine_rule_text(rule: Dict[str, Any]) -> str:
     return " ".join(filter(bool, components))
 
 def vectorize_rules():
-    """Fetches rules, generates embeddings using CodeT5, and stores them in the database."""
-    embedder = CodeEmbedder()
+    """Fetches rules, generates embeddings using the configured embedding service, and stores them in the database."""
+    embedding_service = get_embedding_service()
     conn = None
     
     try:
@@ -127,7 +71,7 @@ def vectorize_rules():
             
             try:
                 # Generate the embedding
-                embedding = embedder.get_embedding(combined_text)
+                embedding = embedding_service.get_embedding(combined_text)
                 
                 # Update the database
                 cur.execute(
@@ -150,9 +94,9 @@ def vectorize_rules():
             conn.close()
 
 def vectorize_sql_code(sql_code: str) -> np.ndarray:
-    """Generate embedding for SQL code using the same CodeT5 model."""
-    embedder = CodeEmbedder()
-    return embedder.get_embedding(sql_code)
+    """Generate embedding for SQL code using the configured embedding service."""
+    embedding_service = get_embedding_service()
+    return embedding_service.get_embedding(sql_code)
 
 if __name__ == "__main__":
     vectorize_rules()

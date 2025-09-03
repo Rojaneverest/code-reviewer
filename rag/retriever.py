@@ -101,7 +101,7 @@ def _combine_and_rank_matches(regex_matches: List[Dict], semantic_matches: List[
     return combined_matches[:top_k]
 
 def find_relevant_rules(code_chunk: str, language: str = 'SQL', top_k: int = 3, 
-                       similarity_threshold: float = 0.75) -> Tuple[Dict[str, List], str]:
+                       similarity_threshold: float = 0.65) -> Tuple[Dict[str, List], str]:
     """
     Find relevant rules using regex and semantic matching.
     

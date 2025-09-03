@@ -35,7 +35,7 @@ def setup_database():
             example_snippet TEXT,
             practice_type TEXT NOT NULL DEFAULT 'bad',
             last_updated_utc TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            vector FLOAT[],  -- Stores CodeT5 embeddings
+            vector FLOAT[],  
             UNIQUE (language, title)
         );
         """)

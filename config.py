@@ -35,3 +35,12 @@ LLM_CONFIG = {
 
 # Legacy LM Studio config for backward compatibility
 LM_STUDIO_CONFIG = LLM_CONFIG["lm_studio"]
+
+# Embedding Configuration - Uses Databricks BGE model only
+EMBEDDING_CONFIG = {
+    "token": os.getenv("DATABRICKS_TOKEN"),
+    "base_url": "https://dbc-3735add4-1cb6.cloud.databricks.com",
+    "endpoint": "/serving-endpoints/bge_large_en_v1_5/invocations",
+    "model_name": "bge_large_en_v1_5",
+    "timeout": int(os.getenv("DATABRICKS_EMBEDDING_TIMEOUT", "60"))
+}
