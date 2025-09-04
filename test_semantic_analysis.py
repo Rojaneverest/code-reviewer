@@ -31,9 +31,10 @@ logger = logging.getLogger(__name__)
 class SemanticTestAnalyzer:
     """Comprehensive analyzer for semantic matching behavior."""
     
-    def __init__(self):
+    def __init__(self, verbose=True):
         self.embedding_service = get_embedding_service()
         self.conn = psycopg2.connect(**DB_CONFIG)
+        self.verbose = verbose
         
     def get_all_rules(self) -> List[Dict]:
         """Get all rules from the database with their embeddings."""
@@ -138,9 +139,14 @@ class SemanticTestAnalyzer:
             end_line = start_line + len(chunk_lines) - 1
             
             print(f"Lines {start_line}-{end_line}:")
-            print(f"```sql")
-            print(chunk.strip())
-            print(f"```")
+            if self.verbose:
+                print(f"```sql")
+                print(chunk.strip())
+                print(f"```")
+            else:
+                # Show just the first line for concise output
+                first_line = chunk.strip().split('\n')[0]
+                print(f"Code: {first_line}...")
             
             # Calculate similarities with all rules
             similarities = self.calculate_similarity_with_all_rules(chunk, rules_with_vectors)
@@ -157,12 +163,13 @@ class SemanticTestAnalyzer:
             print(f"  Rules above 0.75 threshold: {len(threshold_analysis['0.75'])}")
             print(f"  Rules above 0.8 threshold: {len(threshold_analysis['0.8'])}")
             
-            print(f"\nTOP 10 MOST SIMILAR RULES:")
-            for j, sim in enumerate(similarities[:10], 1):
+            print(f"\nTOP 3 MOST SIMILAR RULES:")
+            for j, sim in enumerate(similarities[:3], 1):
                 status = "✅" if sim['meets_threshold_0_7'] else "❌"
-                print(f"  {j:2d}. {status} [{sim['similarity']:.3f}] Rule {sim['rule_id']}: {sim['title']}")
-                print(f"      Category: {sim['category']} | Severity: {sim['severity']}")
-                print(f"      Pattern: {sim['code_pattern'][:50]}...")
+                print(f"  {j}. {status} [{sim['similarity']:.3f}] Rule {sim['rule_id']}: {sim['title']}")
+                if self.verbose:
+                    print(f"     Category: {sim['category']} | Severity: {sim['severity']}")
+                    print(f"     Pattern: {sim['code_pattern'][:40]}...")
                 print()
             
             # Test actual retriever function using database cursor
@@ -179,7 +186,7 @@ class SemanticTestAnalyzer:
                 'start_line': start_line,
                 'end_line': end_line,
                 'code': chunk.strip(),
-                'top_similarities': similarities[:10],
+                'top_similarities': similarities[:3],
                 'threshold_counts': {
                     '0.7': len(threshold_analysis['0.7']),
                     '0.75': len(threshold_analysis['0.75']),
@@ -225,7 +232,8 @@ def main():
         'test_files/beast.sql'
     ]
     
-    analyzer = SemanticTestAnalyzer()
+    # Set verbose=False for more concise output, verbose=True for detailed output
+    analyzer = SemanticTestAnalyzer(verbose=False)
     
     try:
         print("Starting comprehensive semantic matching analysis...")
