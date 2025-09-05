@@ -9,7 +9,7 @@ from .vectorize_rules import vectorize_sql_code
 # Add project root to the Python path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from config import DB_CONFIG
+from config import DB_CONFIG, SEMANTIC_CONFIG
 
 # Set up logging
 logging.basicConfig(
@@ -101,7 +101,7 @@ def _combine_and_rank_matches(regex_matches: List[Dict], semantic_matches: List[
     return combined_matches[:top_k]
 
 def find_relevant_rules(code_chunk: str, language: str = 'SQL', top_k: int = 3, 
-                       similarity_threshold: float = 0.75) -> Tuple[Dict[str, List], str]:
+                       similarity_threshold: float = None) -> Tuple[Dict[str, List], str]:
     """
     Find relevant rules using regex and semantic matching.
     
@@ -114,6 +114,10 @@ def find_relevant_rules(code_chunk: str, language: str = 'SQL', top_k: int = 3,
     Returns:
         Tuple of (relevant_rules dict, method_used string)
     """
+    # Use config value if no threshold provided
+    if similarity_threshold is None:
+        similarity_threshold = SEMANTIC_CONFIG["similarity_threshold"]
+    
     conn = None
     relevant_rules = {'good_practices': [], 'bad_practices': []}
     

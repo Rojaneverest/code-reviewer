@@ -87,9 +87,9 @@ class SemanticTestAnalyzer:
                         'category': rule['category'],
                         'practice_type': rule['practice_type'],
                         'similarity': float(similarity),
-                        'meets_threshold_0_7': similarity > 0.7,
-                        'meets_threshold_0_8': similarity > 0.8,
-                        'meets_threshold_0_75': similarity > 0.75
+                        'meets_threshold_0_6': similarity > 0.6,
+                        'meets_threshold_0_65': similarity > 0.65,
+                        'meets_threshold_0_7': similarity > 0.7
                     })
             
             # Sort by similarity (descending)
@@ -153,19 +153,19 @@ class SemanticTestAnalyzer:
             
             # Analyze thresholds
             threshold_analysis = {
-                '0.7': [s for s in similarities if s['meets_threshold_0_7']],
-                '0.75': [s for s in similarities if s['meets_threshold_0_75']],
-                '0.8': [s for s in similarities if s['meets_threshold_0_8']]
+                '0.6': [s for s in similarities if s['meets_threshold_0_6']],
+                '0.65': [s for s in similarities if s['meets_threshold_0_65']],
+                '0.7': [s for s in similarities if s['meets_threshold_0_7']]
             }
             
             print(f"\nSIMILARITY ANALYSIS:")
+            print(f"  Rules above 0.6 threshold: {len(threshold_analysis['0.6'])}")
+            print(f"  Rules above 0.65 threshold: {len(threshold_analysis['0.65'])}")
             print(f"  Rules above 0.7 threshold: {len(threshold_analysis['0.7'])}")
-            print(f"  Rules above 0.75 threshold: {len(threshold_analysis['0.75'])}")
-            print(f"  Rules above 0.8 threshold: {len(threshold_analysis['0.8'])}")
             
             print(f"\nTOP 3 MOST SIMILAR RULES:")
             for j, sim in enumerate(similarities[:3], 1):
-                status = "✅" if sim['meets_threshold_0_7'] else "❌"
+                status = "✅" if sim['meets_threshold_0_65'] else "❌"
                 print(f"  {j}. {status} [{sim['similarity']:.3f}] Rule {sim['rule_id']}: {sim['title']}")
                 if self.verbose:
                     print(f"     Category: {sim['category']} | Severity: {sim['severity']}")
@@ -175,7 +175,7 @@ class SemanticTestAnalyzer:
             # Test actual retriever function using database cursor
             cursor = self.conn.cursor()
             print(f"ACTUAL RETRIEVER RESULTS:")
-            actual_matches = _find_semantic_matches(chunk, cursor, 'SQL', 0.7)
+            actual_matches = _find_semantic_matches(chunk, cursor, 'SQL', 0.65)
             print(f"  Retriever returned {len(actual_matches)} matches")
             for match in actual_matches:
                 print(f"  - Rule {match['id']}: {match['title']} (Confidence: {match.get('confidence', 'N/A')})")
@@ -188,9 +188,9 @@ class SemanticTestAnalyzer:
                 'code': chunk.strip(),
                 'top_similarities': similarities[:3],
                 'threshold_counts': {
-                    '0.7': len(threshold_analysis['0.7']),
-                    '0.75': len(threshold_analysis['0.75']),
-                    '0.8': len(threshold_analysis['0.8'])
+                    '0.6': len(threshold_analysis['0.6']),
+                    '0.65': len(threshold_analysis['0.65']),
+                    '0.7': len(threshold_analysis['0.7'])
                 },
                 'actual_retriever_matches': len(actual_matches)
             }

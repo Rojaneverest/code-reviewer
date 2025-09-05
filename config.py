@@ -44,3 +44,9 @@ EMBEDDING_CONFIG = {
     "model_name": "bge_large_en_v1_5",
     "timeout": int(os.getenv("DATABRICKS_EMBEDDING_TIMEOUT", "60"))
 }
+
+# Semantic Analysis Configuration
+SEMANTIC_CONFIG = {
+    "similarity_threshold": float(os.getenv("SEMANTIC_SIMILARITY_THRESHOLD", "0.65")),
+    "top_k_rules": int(os.getenv("SEMANTIC_TOP_K_RULES", "3"))
+}
