@@ -82,7 +82,7 @@ def _find_semantic_matches(code_chunk: str, cur, language: str, similarity_thres
     
     return semantic_matches
 
-def _combine_and_rank_matches(regex_matches: List[Dict], semantic_matches: List[Dict], top_k: int = 3) -> List[Dict]:
+def _combine_and_rank_matches(regex_matches: List[Dict], semantic_matches: List[Dict], top_k: int = 6) -> List[Dict]:
     """Combine and rank matches from both regex and semantic search."""
     # Start with regex matches (they have highest confidence)
     combined_matches = regex_matches.copy()
@@ -100,7 +100,7 @@ def _combine_and_rank_matches(regex_matches: List[Dict], semantic_matches: List[
     
     return combined_matches[:top_k]
 
-def find_relevant_rules(code_chunk: str, language: str = 'SQL', top_k: int = 3, 
+def find_relevant_rules(code_chunk: str, language: str = 'SQL', top_k: int = None, 
                        similarity_threshold: float = None) -> Tuple[Dict[str, List], str]:
     """
     Find relevant rules using regex and semantic matching.
@@ -108,15 +108,17 @@ def find_relevant_rules(code_chunk: str, language: str = 'SQL', top_k: int = 3,
     Args:
         code_chunk: The code to analyze
         language: Programming language ('SQL' or 'PySpark')
-        top_k: Maximum number of rules to return
-        similarity_threshold: Minimum similarity score for semantic matches
+        top_k: Maximum number of rules to return (default: 6 from config)
+        similarity_threshold: Minimum similarity score for semantic matches (default: 0.65 from config)
     
     Returns:
         Tuple of (relevant_rules dict, method_used string)
     """
-    # Use config value if no threshold provided
+    # Use config values if not provided
     if similarity_threshold is None:
         similarity_threshold = SEMANTIC_CONFIG["similarity_threshold"]
+    if top_k is None:
+        top_k = SEMANTIC_CONFIG["top_k_rules"]
     
     conn = None
     relevant_rules = {'good_practices': [], 'bad_practices': []}

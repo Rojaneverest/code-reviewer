@@ -48,5 +48,5 @@ EMBEDDING_CONFIG = {
 # Semantic Analysis Configuration
 SEMANTIC_CONFIG = {
     "similarity_threshold": float(os.getenv("SEMANTIC_SIMILARITY_THRESHOLD", "0.65")),
-    "top_k_rules": int(os.getenv("SEMANTIC_TOP_K_RULES", "3"))
+    "top_k_rules": int(os.getenv("SEMANTIC_TOP_K_RULES", "6"))
 }

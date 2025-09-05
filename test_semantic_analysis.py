@@ -163,8 +163,8 @@ class SemanticTestAnalyzer:
             print(f"  Rules above 0.65 threshold: {len(threshold_analysis['0.65'])}")
             print(f"  Rules above 0.7 threshold: {len(threshold_analysis['0.7'])}")
             
-            print(f"\nTOP 3 MOST SIMILAR RULES:")
-            for j, sim in enumerate(similarities[:3], 1):
+            print(f"\nTOP 6 MOST SIMILAR RULES:")
+            for j, sim in enumerate(similarities[:6], 1):
                 status = "✅" if sim['meets_threshold_0_65'] else "❌"
                 print(f"  {j}. {status} [{sim['similarity']:.3f}] Rule {sim['rule_id']}: {sim['title']}")
                 if self.verbose:
@@ -186,7 +186,7 @@ class SemanticTestAnalyzer:
                 'start_line': start_line,
                 'end_line': end_line,
                 'code': chunk.strip(),
-                'top_similarities': similarities[:3],
+                'top_similarities': similarities[:6],
                 'threshold_counts': {
                     '0.6': len(threshold_analysis['0.6']),
                     '0.65': len(threshold_analysis['0.65']),
