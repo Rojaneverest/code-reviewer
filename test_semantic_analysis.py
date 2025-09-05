@@ -31,7 +31,7 @@ logger = logging.getLogger(__name__)
 class SemanticTestAnalyzer:
     """Comprehensive analyzer for semantic matching behavior."""
     
-    def __init__(self, verbose=True):
+    def __init__(self, verbose=False):
         self.embedding_service = get_embedding_service()
         self.conn = psycopg2.connect(**DB_CONFIG)
         self.verbose = verbose
@@ -87,7 +87,6 @@ class SemanticTestAnalyzer:
                         'category': rule['category'],
                         'practice_type': rule['practice_type'],
                         'similarity': float(similarity),
-                        'meets_threshold_0_6': similarity > 0.6,
                         'meets_threshold_0_65': similarity > 0.65,
                         'meets_threshold_0_7': similarity > 0.7
                     })
@@ -109,17 +108,15 @@ class SemanticTestAnalyzer:
         all_rules = self.get_all_rules()
         rules_with_vectors = [r for r in all_rules if r['has_vector']]
         
-        print(f"\n{'='*80}")
-        print(f"SEMANTIC ANALYSIS FOR: {file_path}")
-        print(f"{'='*80}")
-        print(f"Total rules in database: {len(all_rules)}")
-        print(f"Rules with vectors: {len(rules_with_vectors)}")
-        print(f"Rules without vectors: {len(all_rules) - len(rules_with_vectors)}")
+        print(f"\n{'='*60}")
+        print(f"SEMANTIC ANALYSIS: {os.path.basename(file_path)}")
+        print(f"{'='*60}")
+        print(f"Rules: {len(all_rules)} total, {len(rules_with_vectors)} with vectors")
         
         # Split into chunks using the same method as main.py
         chunks_with_lines = map_sql_statements_to_lines(content)
         chunks = [chunk_data[0] for chunk_data in chunks_with_lines]  # Extract just the code
-        print(f"Number of chunks: {len(chunks)}")
+        print(f"Chunks: {len(chunks)}")
         
         analysis_results = {
             'file_path': file_path,
@@ -130,55 +127,39 @@ class SemanticTestAnalyzer:
         }
         
         for i, (chunk, start_line) in enumerate(chunks_with_lines, 1):
-            print(f"\n{'-'*60}")
-            print(f"CHUNK {i}")
-            print(f"{'-'*60}")
+            print(f"\n--- CHUNK {i} ---")
             
             # Calculate end line
             chunk_lines = chunk.strip().split('\n')
             end_line = start_line + len(chunk_lines) - 1
             
             print(f"Lines {start_line}-{end_line}:")
-            if self.verbose:
-                print(f"```sql")
-                print(chunk.strip())
-                print(f"```")
-            else:
-                # Show just the first line for concise output
-                first_line = chunk.strip().split('\n')[0]
-                print(f"Code: {first_line}...")
+            # Show just the first line for concise output
+            first_line = chunk.strip().split('\n')[0]
+            print(f"Code: {first_line}{'...' if len(chunk.strip().split('\n')) > 1 else ''}")
             
             # Calculate similarities with all rules
             similarities = self.calculate_similarity_with_all_rules(chunk, rules_with_vectors)
             
             # Analyze thresholds
             threshold_analysis = {
-                '0.6': [s for s in similarities if s['meets_threshold_0_6']],
                 '0.65': [s for s in similarities if s['meets_threshold_0_65']],
                 '0.7': [s for s in similarities if s['meets_threshold_0_7']]
             }
             
-            print(f"\nSIMILARITY ANALYSIS:")
-            print(f"  Rules above 0.6 threshold: {len(threshold_analysis['0.6'])}")
-            print(f"  Rules above 0.65 threshold: {len(threshold_analysis['0.65'])}")
-            print(f"  Rules above 0.7 threshold: {len(threshold_analysis['0.7'])}")
+            # Show concise similarity stats
+            print(f"Similarity: ≥0.65: {len(threshold_analysis['0.65'])}, ≥0.7: {len(threshold_analysis['0.7'])}")
             
-            print(f"\nTOP 6 MOST SIMILAR RULES:")
-            for j, sim in enumerate(similarities[:6], 1):
+            # Show only top 3 most relevant matches
+            print(f"Top matches:")
+            for j, sim in enumerate(similarities[:3], 1):
                 status = "✅" if sim['meets_threshold_0_65'] else "❌"
-                print(f"  {j}. {status} [{sim['similarity']:.3f}] Rule {sim['rule_id']}: {sim['title']}")
-                if self.verbose:
-                    print(f"     Category: {sim['category']} | Severity: {sim['severity']}")
-                    print(f"     Pattern: {sim['code_pattern'][:40]}...")
-                print()
+                print(f"  {j}. {status} [{sim['similarity']:.3f}] Rule {sim['rule_id']}: {sim['title'][:50]}{'...' if len(sim['title']) > 50 else ''}")
             
             # Test actual retriever function using database cursor
             cursor = self.conn.cursor()
-            print(f"ACTUAL RETRIEVER RESULTS:")
             actual_matches = _find_semantic_matches(chunk, cursor, 'SQL', 0.65)
-            print(f"  Retriever returned {len(actual_matches)} matches")
-            for match in actual_matches:
-                print(f"  - Rule {match['id']}: {match['title']} (Confidence: {match.get('confidence', 'N/A')})")
+            print(f"Retriever: {len(actual_matches)} matches")
             cursor.close()
             
             chunk_analysis = {
@@ -186,9 +167,8 @@ class SemanticTestAnalyzer:
                 'start_line': start_line,
                 'end_line': end_line,
                 'code': chunk.strip(),
-                'top_similarities': similarities[:6],
+                'top_similarities': similarities[:3],
                 'threshold_counts': {
-                    '0.6': len(threshold_analysis['0.6']),
                     '0.65': len(threshold_analysis['0.65']),
                     '0.7': len(threshold_analysis['0.7'])
                 },
@@ -239,10 +219,10 @@ def main():
         print("Starting comprehensive semantic matching analysis...")
         analyzer.run_comprehensive_test(test_files)
         
-        print(f"\n{'='*80}")
+        print(f"\n{'='*40}")
         print("ANALYSIS COMPLETE!")
-        print(f"{'='*80}")
-        print("Check the outputs/ directory for detailed JSON reports.")
+        print(f"{'='*40}")
+        print("JSON reports saved to outputs/ directory.")
         
     except Exception as e:
         logger.error(f"Error during analysis: {e}")
