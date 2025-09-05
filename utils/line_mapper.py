@@ -46,8 +46,19 @@ def map_sql_statements_to_lines(sql_content):
         # Look for the first significant word of the SQL statement
         first_word = stmt_first_sql_line.split()[0].upper()
         
+        # Handle special cases for single-word statements
+        if first_word in ['EXECUTE', 'EXEC', 'COMMIT', 'ROLLBACK', 'BEGIN']:
+            # For these statements, use the whole first line for matching
+            search_term = stmt_first_sql_line
+        else:
+            search_term = first_word
+        
         # Find all potential matches in the remaining content
-        pattern = r'\b' + re.escape(first_word) + r'\b'
+        if first_word in ['EXECUTE', 'EXEC', 'COMMIT', 'ROLLBACK', 'BEGIN']:
+            # For special statements, do exact matching
+            pattern = re.escape(search_term)
+        else:
+            pattern = r'\b' + re.escape(search_term) + r'\b'
         matches = list(re.finditer(pattern, remaining_content, re.IGNORECASE))
         
         found = False
@@ -68,7 +79,17 @@ def map_sql_statements_to_lines(sql_content):
                 
                 # Check if this line matches our expected pattern
                 normalized_actual = re.sub(r'\s+', ' ', actual_line).strip()
-                if normalized_actual.upper().startswith(first_word.upper()):
+                
+                # For special statements, check if the line contains our search term
+                if first_word in ['EXECUTE', 'EXEC', 'COMMIT', 'ROLLBACK', 'BEGIN']:
+                    if search_term.lower() in normalized_actual.lower():
+                        match_found = True
+                    else:
+                        match_found = False
+                else:
+                    match_found = normalized_actual.upper().startswith(first_word.upper())
+                
+                if match_found:
                     # Clean the statement by removing comments for the final output
                     clean_stmt = sqlparse.format(stmt_clean, strip_comments=True).strip()
                     chunks.append((clean_stmt, line_number))
