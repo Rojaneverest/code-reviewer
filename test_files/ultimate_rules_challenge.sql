@@ -445,3 +445,14 @@ SELECT
 FROM monthly_sales ms
 ORDER BY ms.sales_month DESC, ms.customer_segment
 LIMIT @result_limit;
+
+SELECT * FROM users, orders, products;
+SELECT u.name, o.total FROM users u, orders o, products p WHERE u.active = 1;
+
+-- Should trigger mixed join syntax
+SELECT * FROM users u, orders o JOIN products p ON o.product_id = p.id WHERE u.id = o.user_id;
+
+-- Should trigger function in WHERE
+SELECT * FROM users WHERE UPPER(email) = 'TEST@EXAMPLE.COM';
+SELECT * FROM orders WHERE YEAR(order_date) = 2023;
+SELECT * FROM products WHERE ABS(price - cost) > 50;

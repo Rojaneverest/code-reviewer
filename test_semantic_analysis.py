@@ -207,9 +207,7 @@ def main():
     """Main function to run semantic analysis tests."""
     
     test_files = [
-        'test_files/semantic_test.sql',
-        'test_files/test_code_full.sql',
-        'test_files/beast.sql'
+        'test_files\comprehensive_rules_test.sql'
     ]
     
     # Set verbose=False for more concise output, verbose=True for detailed output
