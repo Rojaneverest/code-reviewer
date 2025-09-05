@@ -64,7 +64,7 @@ VALUES
 
     ('Cartesian Product with Insufficient Conditions',
     'Multiple tables joined with insufficient WHERE conditions to prevent Cartesian products. Ensure each table relationship has proper join conditions.',
-    '(?i)from\s+(\w+\s+\w+\s*,\s*)+\w+\s+\w+(?=.*where)(?!.*\1\.\w+\s*=\s*\w+\.\w+.*\2\.\w+\s*=\s*\w+\.\w+)',
+    '(?i)from\s+(\w+\s+\w+\s*,\s*)+(\w+\s+\w+)(?=.*where)(?!.*\1\.\w+\s*=\s*\2\.\w+)',
     'Major',
     'SQL',
     'Performance', 
