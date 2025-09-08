@@ -14,7 +14,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from config import DB_CONFIG
 from rag.embedding_service import get_embedding_service
-from rag.enhanced_vectorize_rules import combine_rule_text_enhanced
+from rag.enhanced_vectorize_rules import enhanced_combine_rule_text
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -52,38 +52,44 @@ def populate_enhanced_vectors():
             try:
                 logger.info(f"Processing rule {rule_id}: {title}")
                 
-                # Generate enhanced text combinations
-                sql_pattern_text, semantic_intent_text, hybrid_text, original_text = combine_rule_text_enhanced(
-                    title, description, code_pattern, example_snippet or "", category, practice_type
+                # Create rule dictionary for the enhanced function
+                rule_dict = {
+                    'title': title,
+                    'description': description,
+                    'code_pattern': code_pattern,
+                    'example_snippet': example_snippet,
+                    'category': category,
+                    'practice_type': practice_type
+                }
+                
+                # Generate enhanced embeddings
+                sql_pattern_text, semantic_intent_text, hybrid_text = enhanced_combine_rule_text(
+                    rule_dict
                 )
                 
-                # Generate embeddings
-                original_vector = embedding_service.get_embedding(original_text)
-                sql_pattern_vector = embedding_service.get_embedding(sql_pattern_text) if sql_pattern_text else None
-                semantic_vector = embedding_service.get_embedding(semantic_intent_text) if semantic_intent_text else None
-                hybrid_vector = embedding_service.get_embedding(hybrid_text) if hybrid_text else None
+                # Create three specialized vectors
+                sql_vector = embedding_service.get_embedding(sql_pattern_text)
+                semantic_vector = embedding_service.get_embedding(semantic_intent_text)
+                hybrid_vector = embedding_service.get_embedding(hybrid_text)
                 
                 # Convert to lists for PostgreSQL
-                original_vector_list = original_vector.tolist() if original_vector is not None else None
-                sql_pattern_vector_list = sql_pattern_vector.tolist() if sql_pattern_vector is not None else None
+                sql_vector_list = sql_vector.tolist() if sql_vector is not None else None
                 semantic_vector_list = semantic_vector.tolist() if semantic_vector is not None else None
                 hybrid_vector_list = hybrid_vector.tolist() if hybrid_vector is not None else None
                 
                 # Update the rule with all vectors
                 cursor.execute("""
                 UPDATE rules 
-                SET vector = %s, 
-                    sql_pattern_vector = %s, 
-                    semantic_vector = %s, 
+                SET sql_pattern_vector = %s, 
+                    semantic_intent_vector = %s, 
                     hybrid_vector = %s 
                 WHERE id = %s;
-                """, (original_vector_list, sql_pattern_vector_list, semantic_vector_list, hybrid_vector_list, rule_id))
+                """, (sql_vector_list, semantic_vector_list, hybrid_vector_list, rule_id))
                 
                 processed_count += 1
                 logger.info(f"  ✓ Updated vectors for rule {rule_id}")
                 
                 # Log vector info
-                logger.debug(f"    Original text: {original_text[:100]}...")
                 logger.debug(f"    SQL pattern text: {sql_pattern_text[:100] if sql_pattern_text else 'None'}...")
                 logger.debug(f"    Semantic text: {semantic_intent_text[:100] if semantic_intent_text else 'None'}...")
                 logger.debug(f"    Hybrid text: {hybrid_text[:100] if hybrid_text else 'None'}...")
