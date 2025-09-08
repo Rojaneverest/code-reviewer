@@ -10,7 +10,8 @@ import logging
 from typing import Dict, List
 
 # Add project root to Python path
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+project_root = os.path.dirname(os.path.abspath(__file__))
+sys.path.append(project_root)
 
 from rag.retriever import find_relevant_rules
 from rag.enhanced_retriever import find_relevant_rules_enhanced
@@ -21,17 +22,28 @@ logger = logging.getLogger(__name__)
 
 def read_test_sql_files() -> Dict[str, str]:
     """Read all SQL test files for analysis."""
-    test_files_dir = "/workspaces/code-reviewer/test_files"
+    # Use relative path from script location
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    test_files_dir = os.path.join(script_dir, "test_files")
+    
+    if not os.path.exists(test_files_dir):
+        logger.error(f"Test files directory not found: {test_files_dir}")
+        return {}
+    
     sql_files = {}
     
-    for filename in os.listdir(test_files_dir):
-        if filename.endswith('.sql'):
-            filepath = os.path.join(test_files_dir, filename)
-            try:
-                with open(filepath, 'r') as f:
-                    sql_files[filename] = f.read()
-            except Exception as e:
-                logger.warning(f"Could not read {filename}: {e}")
+    try:
+        for filename in os.listdir(test_files_dir):
+            if filename.endswith('.sql'):
+                filepath = os.path.join(test_files_dir, filename)
+                try:
+                    with open(filepath, 'r', encoding='utf-8') as f:
+                        sql_files[filename] = f.read()
+                        logger.info(f"Read file: {filename}")
+                except Exception as e:
+                    logger.warning(f"Could not read {filename}: {e}")
+    except Exception as e:
+        logger.error(f"Error reading directory {test_files_dir}: {e}")
     
     return sql_files
 
@@ -115,6 +127,10 @@ def main():
     sql_files = read_test_sql_files()
     logger.info(f"Found {len(sql_files)} SQL test files")
     
+    if not sql_files:
+        logger.error("No SQL files found. Please check that test_files directory exists and contains .sql files")
+        return
+    
     results = {
         'comparison_summary': {},
         'file_analyses': {}
@@ -186,16 +202,28 @@ def main():
     logger.info(f"Total chunks analyzed: {total_chunks}")
     logger.info(f"Original method total matches: {total_orig_matches}")
     logger.info(f"Enhanced method total matches: {total_enh_matches}")
-    logger.info(f"Improvement ratio: {results['comparison_summary']['improvement_ratio']:.2f}x")
+    if total_orig_matches > 0:
+        logger.info(f"Improvement ratio: {results['comparison_summary']['improvement_ratio']:.2f}x")
+    else:
+        logger.info(f"Improvement: Enhanced found {total_enh_matches} matches vs 0 from original")
     logger.info(f"Average matches per chunk - Original: {results['comparison_summary']['average_matches_per_chunk']['original']:.2f}")
     logger.info(f"Average matches per chunk - Enhanced: {results['comparison_summary']['average_matches_per_chunk']['enhanced']:.2f}")
     
-    # Save detailed results
-    output_file = "/workspaces/code-reviewer/outputs/enhanced_vs_original_comparison.json"
-    with open(output_file, 'w') as f:
-        json.dump(results, f, indent=2, default=str)
+    # Save detailed results - use relative path
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    outputs_dir = os.path.join(script_dir, "outputs")
     
-    logger.info(f"Detailed results saved to {output_file}")
+    # Create outputs directory if it doesn't exist
+    os.makedirs(outputs_dir, exist_ok=True)
+    
+    output_file = os.path.join(outputs_dir, "enhanced_vs_original_comparison.json")
+    
+    try:
+        with open(output_file, 'w', encoding='utf-8') as f:
+            json.dump(results, f, indent=2, default=str)
+        logger.info(f"Detailed results saved to {output_file}")
+    except Exception as e:
+        logger.error(f"Failed to save results: {e}")
 
 if __name__ == "__main__":
     main()
