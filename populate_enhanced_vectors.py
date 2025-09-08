@@ -81,7 +81,7 @@ def populate_enhanced_vectors():
                 cursor.execute("""
                 UPDATE rules 
                 SET sql_pattern_vector = %s, 
-                    semantic_intent_vector = %s, 
+                    semantic_vector = %s, 
                     hybrid_vector = %s 
                 WHERE id = %s;
                 """, (sql_vector_list, semantic_vector_list, hybrid_vector_list, rule_id))
